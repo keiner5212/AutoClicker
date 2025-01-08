@@ -7,7 +7,47 @@ on:
   workflow_dispatch:
 
 jobs:
+
+  create_release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+    
+      - name: Install Toml
+        run: pip install toml
+      
+      - name: Extract version
+        run: |
+          echo "VERSION=$(python ./version.py)" >>$GITHUB_ENV
+
+      - name: Extract Changes
+        run: |
+          echo "CHANGES=$(cat ./changes.txt)" >>$GITHUB_ENV
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.VERSION }}
+          release_name: Release ${{ env.VERSION }}
+          body: ${{ env.CHANGES }}
+          draft: true
+          prerelease: false
+      
+      - name: save output url
+        run: |
+          echo "RELEASE_URL=${{ steps.create_release.outputs.upload_url }}" >>$GITHUB_ENV
+
   build:
+    needs: create_release
     permissions:
       contents: write
 
@@ -32,35 +72,12 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
-      - name: Istall pyInstaller
+      - name: Install pyInstaller
         run: pip install pyinstaller
       
-      - name: Install Toml
-        run: pip install toml
-
       - name: Build
         run: pyinstaller --onefile --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
-      
-      - name: Extract version
-        run: |
-          echo "VERSION=$(python ./version.py)" >>$GITHUB_ENV
-
-      - name: Extract Changes
-        run: |
-          echo "CHANGES=$(cat ./changes.txt)" >>$GITHUB_ENV
           
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ env.VERSION }}
-          release_name: Release ${{ env.VERSION }}
-          body: ${{ env.CHANGES }}
-          draft: true
-          prerelease: false
-      
       - name: Get release file name for others
         if: matrix.os != 'windows-latest'
         run: echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}" >>$GITHUB_ENV
@@ -75,7 +92,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} 
+          upload_url: ${{ env.RELEASE_URL }} 
           asset_path: ./dist/${{ env.RELEASE_FILE_NAME }}
           asset_name: ${{ env.RELEASE_FILE_NAME }}
           asset_content_type: application/octet-stream
