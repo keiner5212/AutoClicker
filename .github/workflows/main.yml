@@ -59,6 +59,9 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
 
+    outputs:
+      asset_name: ${{ steps.get_release_file_name.outputs.asset_name }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -80,13 +83,10 @@ jobs:
       - name: Build
         run: pyinstaller --onefile --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
           
-      - name: Get release file name for others
-        if: matrix.os != 'windows-latest'
-        run: echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}" >>$GITHUB_ENV
-
-      - name: Get release file name for windows
-        if: matrix.os == 'windows-latest'
-        run: echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}.exe" >>$GITHUB_ENV
+      - name: Get release file name
+        id: get_release_file_name
+        run: |
+          echo "::set-output name=asset_name::$(ls dist)"
 
       - name: Upload Release Asset
         id: upload-release-asset 
