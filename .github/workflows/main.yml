@@ -89,6 +89,7 @@ jobs:
         id: get_release_file_name
         shell: bash
         run: |
+          ls dist
           echo "asset_name=$(python ./getasset.py)" >> $GITHUB_OUTPUT
 
       - name: Upload Release Asset
