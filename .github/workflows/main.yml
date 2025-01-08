@@ -86,7 +86,7 @@ jobs:
       - name: Get release file name
         id: get_release_file_name
         run: |
-          echo "::set-output name=asset_name::$(ls dist)"
+          echo "::set-output name=asset_name::$(python .\getasset.py)"
 
       - name: Upload Release Asset
         id: upload-release-asset 
