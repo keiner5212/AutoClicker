@@ -13,6 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest]
+        project_version_command: { 'import toml; print(toml.load("pyproject.toml")["project"]["version"])'}
 
     steps:
       - name: Checkout
@@ -39,7 +40,7 @@ jobs:
       - name: Extract version
         id: get_version
         run: |
-          echo "VERSION=$(python -c '${{secrets.PROJECTVERSIONCOMMAND}}')"
+          echo "VERSION=$(python -c ${{matrix.project_version_command}})" 
           
       # - name: Create Release
       #   id: create_release
