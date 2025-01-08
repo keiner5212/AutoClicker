@@ -1,0 +1,2 @@
+Los cambios fueron:\n
+- Se puede iniciar
