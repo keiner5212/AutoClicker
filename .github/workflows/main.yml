@@ -39,7 +39,7 @@ jobs:
       - name: Extract version
         id: get_version
         run: |
-          echo "$(python -c 'import toml; print(toml.load(\"pyproject.toml\")[\"tool\"][\"poetry\"][\"version\"])')" 
+          echo "VERSION=$(python -c '${{secrets.PROJECTVERSIONCOMMAND}}')"
           
       # - name: Create Release
       #   id: create_release
