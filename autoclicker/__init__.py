@@ -154,3 +154,7 @@ def main():
 
     root.mainloop()
     listener.stop()
+
+
+if __name__ == "__main__":
+    main()
