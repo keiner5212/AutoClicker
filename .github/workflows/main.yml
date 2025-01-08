@@ -61,9 +61,6 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
 
-    outputs:
-      asset_name: ${{ steps.get_release_file_name.outputs.asset_name }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -83,14 +80,10 @@ jobs:
         run: pip install pyinstaller
       
       - name: Build
-        run: pyinstaller --onefile --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
+        run: pyinstaller --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
           
-      - name: Get release file name
-        id: get_release_file_name
-        shell: bash
-        run: |
-          ls dist
-          echo "asset_name=$(python ./getasset.py)" >> $GITHUB_OUTPUT
+      - name: Compress
+        run: zip -r ./dist/autoclicker-${{matrix.os}}.zip ./dist/autoclicker-${{matrix.os}}
 
       - name: Upload Release Asset
         id: upload-release-asset 
@@ -100,6 +93,6 @@ jobs:
           UPLOAD_URL: ${{ needs.create_release.outputs.upload_url }}
         with:
           upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: ./dist/${{ steps.get_release_file_name.outputs.asset_name }}
-          asset_name: ${{ steps.get_release_file_name.outputs.asset_name }}
+          asset_path: ./dist/autoclicker-${{matrix.os}}.zip
+          asset_name: autoclicker-${{matrix.os}}
           asset_content_type: application/octet-stream
