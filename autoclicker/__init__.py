@@ -90,11 +90,13 @@ def main():
     listener.start()
 
     # Window icon
-    path = os.path.dirname(os.path.dirname(os.path.abspath(__name__))) + ("\\icon.ico" if os.name == "nt" else "/icon.ico")
     try:
-        root.iconbitmap(path)
+        root.iconbitmap(
+            os.path.dirname(os.path.dirname(os.path.abspath(__name__)))
+            + ("\\icon.ico" if os.name == "nt" else "/icon.ico")
+        )
     except Exception as e:
-        print("Error al cargar el icono:", e)
+        pass
 
     # TTK theme
     style = ttk.Style()
@@ -145,7 +147,7 @@ def main():
     quit_button = ttk.Button(root, text="Salir", command=root.quit)
     quit_button.grid(row=4, column=2, pady=10)
 
-    tooltip = ToolTip(
+    ToolTip(
         help_button,
         """CPS significa 'Clics por segundo', ajusta este valor para controlar la frecuencia de los clics, el valor debe estar entre {} y {}. 
         
