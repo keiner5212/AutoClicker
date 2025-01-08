@@ -12,4 +12,4 @@ jobs:
 
     steps:
       - name: say hello
-      - run: echo "que onda pai"
+        run: echo "que onda pai"
