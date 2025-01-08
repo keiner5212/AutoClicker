@@ -84,11 +84,11 @@ jobs:
       
       - name: Build macOS
         if: matrix.os == 'macos-latest'
-        run: pyinstaller --onefile --clean --add-data "./icon.ico;." --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
+        run: pyinstaller --onefile --clean --add-data "./icon.ico:." --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
       
       - name: Build Linux or Windows
         if: matrix.os != 'macos-latest'
-        run: pyinstaller --onefile --clean --add-data "./icon.ico;." --icon=./icon.ico --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
+        run: pyinstaller --onefile --clean --add-data "./icon.ico:." --icon=./icon.ico --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
           
       - name: Compress folder windows
         if: matrix.os == 'windows-latest'
