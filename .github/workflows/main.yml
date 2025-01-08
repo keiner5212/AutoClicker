@@ -1,0 +1,15 @@
+name: crear ejecutables
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: say hello
+      - run: echo "que onda pai"
