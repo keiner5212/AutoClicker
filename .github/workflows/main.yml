@@ -34,7 +34,7 @@ jobs:
       - name: Extract Changes
         id: extract_changes
         run: |
-          echo "::set-output name=changes::$(cat ./changes.py)"
+          echo "::set-output name=changes::$(cat ./changes.txt)"
 
       - name: Create Release
         id: create_release
