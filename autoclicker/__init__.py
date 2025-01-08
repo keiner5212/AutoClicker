@@ -33,7 +33,6 @@ def main():
         update_status("Estado: Ejecutando")
 
         delay = calculate_delay(cps)
-        print("Clickeando cada {} segundos".format(delay))
 
         start_time = time.perf_counter()  # get the current time
         next_click_time = start_time + delay  # calculate the time for the first click
