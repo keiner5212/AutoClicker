@@ -90,7 +90,7 @@ def main():
     listener.start()
 
     # Window icon
-    path = os.path.dirname(os.path.dirname(os.path.abspath(__name__))) + "\icon.ico"
+    path = os.path.dirname(os.path.dirname(os.path.abspath(__name__))) + ("\\icon.ico" if os.name == "nt" else "/icon.ico")
     try:
         root.iconbitmap(path)
     except Exception as e:
