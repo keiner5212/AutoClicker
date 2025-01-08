@@ -7,5 +7,5 @@ def get_file_name(directory):
     else:
         return ""
 
-file_name = get_file_name(directory = os.path.dirname(os.path.abspath(__name__))+"\\dist")
+file_name = get_file_name(os.path.dirname(os.path.abspath(__name__))+"\\dist" if os.name == "nt" else "/dist")
 print(file_name)
