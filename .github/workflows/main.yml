@@ -57,14 +57,12 @@ jobs:
           prerelease: false
       
       - name: Get release file name for others
-        run: |
-          echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}.exe" >>$GITHUB_ENV
         if: matrix.os != 'windows-latest'
+        run: echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}" >>$GITHUB_ENV
 
       - name: Get release file name for windows
-        run: |
-          echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}" >>$GITHUB_ENV
         if: matrix.os == 'windows-latest'
+        run: echo "RELEASE_FILE_NAME=autoclicker-${{matrix.os}}.exe" >>$GITHUB_ENV
 
       - name: Upload Release Asset
         id: upload-release-asset 
