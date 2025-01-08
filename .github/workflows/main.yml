@@ -96,6 +96,6 @@ jobs:
           UPLOAD_URL: ${{ needs.create_release.outputs.upload_url }}
         with:
           upload_url: ${{ env.UPLOAD_URL }}
-          asset_path: ./dist/${{ env.RELEASE_FILE_NAME }}
-          asset_name: ${{ env.RELEASE_FILE_NAME }}
+          asset_path: ./dist/${{ steps.get_release_file_name.outputs.asset_name }}
+          asset_name: ${{ steps.get_release_file_name.outputs.asset_name }}
           asset_content_type: application/octet-stream
