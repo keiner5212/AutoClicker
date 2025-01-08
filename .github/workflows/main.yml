@@ -74,7 +74,7 @@ jobs:
         uses: Gr1N/setup-poetry@v9
 
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --no-venv
 
       - name: Install pyInstaller
         run: pip install pyinstaller
