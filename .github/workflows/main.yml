@@ -8,8 +8,61 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-latest]
 
     steps:
-      - name: say hello
-        run: echo "que onda pai"
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+      # - name: Set up Python
+      #   uses: actions/setup-python@v2
+      #   with:
+      #     python-version: '3.12'
+      
+      # - name: Install Poetry
+      #   uses: Gr1N/setup-poetry@v9
+      #   run: poetry --version
+
+      # - name: Install dependencies
+      #   run: poetry install
+
+      # - name: Istall pyInstaller
+      #   run: pip install pyinstaller
+
+      # - name: Build
+      #   run: pyinstaller --onefile --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
+      
+      - name: Extract version
+        id: get_version
+        run: |
+          echo "$(python -c 'import toml; print(toml.load(\"pyproject.toml\")[\"tool\"][\"poetry\"][\"version\"])')" 
+          
+      # - name: Create Release
+      #   id: create_release
+      #   uses: actions/create-release@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     tag_name: ${{ github.ref }}
+      #     release_name: Release ${{ github.ref }}
+      #     body: |
+      #       Changes in this Release
+      #       - First Change
+      #       - Second Change
+      #     draft: true
+      #     prerelease: false
+
+      # - name: Upload Release Asset
+      #   id: upload-release-asset 
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ steps.create_release.outputs.upload_url }} 
+      #     asset_path: ./dist/xd.txt
+      #     asset_name: xd.txt
+      #     asset_content_type: text/plain
