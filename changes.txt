@@ -1,2 +1,1 @@
-Los cambios fueron:\n
-- Se puede iniciar
+Lanzamiento del programa
