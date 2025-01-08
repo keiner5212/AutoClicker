@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest]
-        project_version_command: { 'import toml; print(toml.load("pyproject.toml")["project"]["version"])'}
+        project_version_command: ['import toml; print(toml.load("pyproject.toml")["project"]["version"])']
 
     steps:
       - name: Checkout
