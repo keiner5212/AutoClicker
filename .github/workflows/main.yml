@@ -28,11 +28,13 @@ jobs:
       
       - name: Extract version
         id: extract_version
+        shell: bash
         run: |
           echo "version=$(python ./version.py)" >> $GITHUB_OUTPUT
 
       - name: Extract Changes
         id: extract_changes
+        shell: bash
         run: |
           echo "changes=$(cat ./changes.txt)" >> $GITHUB_OUTPUT
 
@@ -85,6 +87,7 @@ jobs:
           
       - name: Get release file name
         id: get_release_file_name
+        shell: bash
         run: |
           echo "asset_name=$(python ./getasset.py)" >> $GITHUB_OUTPUT
 
