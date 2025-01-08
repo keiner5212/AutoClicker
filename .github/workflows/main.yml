@@ -29,12 +29,12 @@ jobs:
       - name: Extract version
         id: extract_version
         run: |
-          echo "::set-output name=version::$(python ./version.py)"
+          echo "version=$(python ./version.py)" >> $GITHUB_OUTPUT
 
       - name: Extract Changes
         id: extract_changes
         run: |
-          echo "::set-output name=changes::$(cat ./changes.txt)"
+          echo "changes=$(cat ./changes.txt)" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -86,7 +86,7 @@ jobs:
       - name: Get release file name
         id: get_release_file_name
         run: |
-          echo "::set-output name=asset_name::$(python ./getasset.py)"
+          echo "asset_name=$(python ./getasset.py)" >> $GITHUB_OUTPUT
 
       - name: Upload Release Asset
         id: upload-release-asset 
