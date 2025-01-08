@@ -3,6 +3,7 @@ from tkinter import ttk
 from pynput.mouse import Controller, Button
 from pynput import keyboard
 import threading
+import os
 import time
 from autoclicker.core.Tooltip import ToolTip
 
@@ -88,8 +89,10 @@ def main():
     listener = keyboard.Listener(on_press=on_press)
     listener.start()
 
+    # Window icon
+    path = os.path.dirname(os.path.dirname(os.path.abspath(__name__))) + "\icon.ico"
     try:
-        root.iconbitmap("icon.ico")
+        root.iconbitmap(path)
     except Exception as e:
         print("Error al cargar el icono:", e)
 
