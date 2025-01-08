@@ -81,7 +81,7 @@ jobs:
       
       - name: Build macOS
         if: matrix.os == 'macos-latest'
-        run: pyinstaller --onefile --icon=./icon.icns --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
+        run: pyinstaller --onefile --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
       
       - name: Build Linux or Windows
         if: matrix.os != 'macos-latest'
