@@ -82,8 +82,15 @@ jobs:
       - name: Build
         run: pyinstaller --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
           
-      - name: Compress
-        run: zip -r ./dist/autoclicker-${{matrix.os}}.zip ./dist/autoclicker-${{matrix.os}}
+      - name: Compress folder windows
+        if: matrix.os == 'windows-latest'
+        run: |
+            7z a ./dist/autoclicker-${{matrix.os}}.zip ./dist/autoclicker-${{matrix.os}}
+        
+      - name: Compress folder posix
+        if: matrix.os != 'windows-latest'
+        run: |
+            zip -r ./dist/autoclicker-${{matrix.os}}.zip ./dist/autoclicker-${{matrix.os}}
 
       - name: Upload Release Asset
         id: upload-release-asset 
@@ -94,5 +101,5 @@ jobs:
         with:
           upload_url: ${{ env.UPLOAD_URL }}
           asset_path: ./dist/autoclicker-${{matrix.os}}.zip
-          asset_name: autoclicker-${{matrix.os}}
+          asset_name: autoclicker-${{matrix.os}}.zip
           asset_content_type: application/octet-stream
