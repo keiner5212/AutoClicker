@@ -31,6 +31,9 @@ jobs:
 
       - name: Istall pyInstaller
         run: pip install pyinstaller
+      
+      - name: Install Toml
+        run: pip install toml
 
       - name: Build
         run: pyinstaller --onefile --windowed --name "autoclicker-${{matrix.os}}" autoclicker/__init__.py
