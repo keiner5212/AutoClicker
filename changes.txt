@@ -1,1 +1,1 @@
-Lanzamiento del programa
+Optimizaciones, refactorización, añadidos algunos inputs para que sea mas personalizable
