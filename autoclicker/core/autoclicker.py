@@ -4,6 +4,7 @@ from tkinter import ttk
 from pynput.mouse import Controller, Button
 from pynput import keyboard
 from autoclicker.core.Tooltip import ToolTip
+from autoclicker.core.utils import resource_path
 import os
 
 
@@ -17,7 +18,6 @@ class AutoClickerApp:
         self.window_title = "Auto Clicker"
         self.window_width = 330
         self.window_height = 210
-        self.error = ""
         self.pause_key = keyboard.Key.alt_gr
         self.countdown_time = 5
 
@@ -39,13 +39,9 @@ class AutoClickerApp:
 
         # Window icon
         try:
-            self.root.iconbitmap(
-                os.path.dirname(os.path.dirname(os.path.abspath(__name__)))
-                + ("\\icon.ico" if os.name == "nt" else "/icon.ico")
-            )
-            self.error = "no error"
+            self.root.iconbitmap(resource_path("icon.ico"))
         except Exception as e:
-            self.error = str(e)
+            pass
 
         # Crear grid layout
         self.root.grid_columnconfigure(1, weight=1)
@@ -78,10 +74,8 @@ class AutoClickerApp:
 """CPS significa 'Clics por segundo', ajusta este valor para controlar la frecuencia de los clics, el valor debe estar entre {} y {}. 
 
 Nota: Los CPS son aproximados, ya que dependen de muchas cosas: cpu, interprete de python, tiempo de renderizacion, errores de redondeo del sistema IEEE 754, etc.
-
-Error: {}
 """.format(
-                self.min_cps, self.max_cps, self.error
+                self.min_cps, self.max_cps
             ),
             200,
         )
