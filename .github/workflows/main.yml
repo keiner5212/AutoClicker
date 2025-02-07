@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-
   create_release:
     permissions:
       contents: write
@@ -15,17 +14,16 @@ jobs:
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.extract_version.outputs.version }}
-      changes: ${{ steps.extract_changes.outputs.changes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
       - name: Set up Python
         uses: actions/setup-python@v2
-    
+
       - name: Install Toml
         run: pip install toml
-      
+
       - name: Extract version
         id: extract_version
         shell: bash
@@ -34,10 +32,11 @@ jobs:
 
       - name: Extract Changes
         id: extract_changes
-        shell: bash
+        shell: powershell
         run: |
-          changes=$(cat ./CHANGELOG.md | base64 -w 0)
-          echo "changes=$changes" >> $GITHUB_OUTPUT
+          $content = Get-Content ./CHANGELOG.md -Raw
+          $encodedContent = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
+          echo "changes=$encodedContent" >> $env:GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -47,7 +46,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ fromJson(steps.extract_changes.outputs.changes) | base64 --decode }}  
+          body: ${{ steps.extract_changes.outputs.changes }}  # ¡Ojo! Aquí decodificaremos diferente
           draft: true
           prerelease: false
 
