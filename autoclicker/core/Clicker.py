@@ -2,7 +2,6 @@ import threading
 import time
 from pynput.mouse import Button
 
-
 class Clicker:
     def __init__(self, mouse, app):
         self.mouse = mouse
@@ -25,11 +24,19 @@ class Clicker:
         self.clicking = False
 
     def calculate_delay(self, cps):
-        """Calcula el delay entre clics."""
+        """Calcula el delay entre clics usando una curva cuadrática ajustada."""
         if cps < 1:
             return 1
-        cps = min(cps, 1000)
-        return (1 / cps) * 0.99
+        cps = min(cps, 500)  
+
+        # coeficientes de la curva cuadrática
+        a = 2.634e-6  
+        b = -0.002351
+        c = 0.996
+        percentage = a * (cps ** 2) + b * cps + c
+        percentage = max(min(percentage, 0.95), 0.5)
+        delay = (1 / cps) * percentage
+        return delay
 
     def countdown(self, countdown_time, cps):
         """Muestra la cuenta regresiva en la interfaz."""
