@@ -46,7 +46,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ steps.extract_changes.outputs.changes }}  # ¡Ojo! Aquí decodificaremos diferente
+          body: ${{ fromJson('"' + steps.extract_changes.outputs.changes + '"') }}
           draft: true
           prerelease: false
 
