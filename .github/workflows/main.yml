@@ -29,12 +29,14 @@ jobs:
         shell: bash
         run: |
           echo "version=$(python ./version.py)" >> $GITHUB_OUTPUT
+      - name: Install jq
+        run: choco install jq -y
 
       - name: Extract Changes
         id: extract_changes
         shell: bash
         run: |
-          changes=$(cat ./CHANGELOG.md)
+          changes=$(jq -sR '.' < ./CHANGELOG.md)
           echo "changes=$changes" >> $GITHUB_OUTPUT
 
       - name: Create Release
@@ -45,7 +47,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ steps.extract_changes.outputs.changes }}
+          body: ${{ fromJson(steps.extract_changes.outputs.changes) }}
           draft: true
           prerelease: false
 
