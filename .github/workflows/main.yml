@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           changes=$(cat ./CHANGELOG.md)
-          echo "changes='$changes'" >> $GITHUB_OUTPUT
+          echo "changes=$changes" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
