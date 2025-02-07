@@ -36,7 +36,7 @@ jobs:
         id: extract_changes
         shell: bash
         run: |
-          changes=$(cat ./CHANGELOG.md | base64 -w 0)  # Codifica el contenido en Base64
+          changes=$(cat ./CHANGELOG.md | base64 -w 0)
           echo "changes=$changes" >> $GITHUB_OUTPUT
 
       - name: Create Release
