@@ -7,47 +7,35 @@ on:
   workflow_dispatch:
 
 jobs:
+
   create_release:
     permissions:
       contents: write
     runs-on: windows-latest
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
-      version: ${{ steps.extract_version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v2
 
       - name: Set up Python
         uses: actions/setup-python@v2
-
+    
       - name: Install Toml
         run: pip install toml
-
+      
       - name: Extract version
         id: extract_version
         shell: bash
         run: |
           echo "version=$(python ./version.py)" >> $GITHUB_OUTPUT
 
-      - name: Read CHANGELOG
-        id: read_changelog
-        shell: powershell
+      - name: Extract Changes
+        id: extract_changes
+        shell: bash
         run: |
-          $content = Get-Content -Path ./CHANGELOG.md -Raw
-          $base64Content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
-          echo "base64_content=$base64Content" >> $env:GITHUB_OUTPUT
-
-      - name: Decode CHANGELOG
-        id: decode_changelog
-        shell: powershell
-        env:
-          BASE64_CONTENT: ${{ steps.read_changelog.outputs.base64_content }} 
-        run: |
-          $decodedBytes = [Convert]::FromBase64String($env:BASE64_CONTENT)
-          $decodedContent = [System.Text.Encoding]::UTF8.GetString($decodedBytes)
-          echo "decoded_content=$decodedContent" >> $env:GITHUB_OUTPUT
-          Write-Output "Longitud del contenido decodificado: $($decodedContent.Length)"
+          changes=$(cat ./CHANGELOG.md)
+          echo "changes=$changes" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
@@ -57,7 +45,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ steps.decode_changelog.outputs.decoded_content }} 
+          body: ${{ steps.extract_changes.outputs.changes }}
           draft: true
           prerelease: false
 
