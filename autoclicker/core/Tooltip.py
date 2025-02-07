@@ -1,10 +1,12 @@
 import tkinter as tk
+import webbrowser
 
 
 class ToolTip:
-    def __init__(self, widget, text, wraplength=200):
+    def __init__(self, widget, text, wraplength=200, link=None):
         self.widget = widget
         self.text = text
+        self.link = link
         self.tooltip = None
         self.wraplength = wraplength
 
@@ -40,6 +42,14 @@ class ToolTip:
         )
         label.pack(padx=5, pady=5)
 
+        # If there's a link, bind the click event to open it
+        if self.link:
+            self.widget.bind("<Button-1>", self.open_link)
+
     def hide_tooltip(self, event):
         if self.tooltip:
             self.tooltip.destroy()
+
+    def open_link(self, event):
+        if self.link:
+            webbrowser.open(self.link)

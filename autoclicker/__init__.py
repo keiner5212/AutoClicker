@@ -1,5 +1,5 @@
 import tkinter as tk
-from autoclicker.core.autoclicker import AutoClickerApp
+from autoclicker.core.AutoClickerApp import AutoClickerApp
 
 def main():
     root = tk.Tk()
