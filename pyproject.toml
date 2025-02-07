@@ -1,6 +1,6 @@
 [project]
 name = "autoclicker"
-version = "1.0"
+version = "1.1.0"
 description = ""
 authors = [
     {name = "Keiner Alvarado",email = "kjgameplay0000@gmail.com"}

@@ -71,7 +71,7 @@ class AutoClickerApp:
         self.cps_help.grid(row=2, column=2, padx=3)
         ToolTip(
             self.cps_help,
-"""CPS significa 'Clics por segundo', ajusta este valor para controlar la frecuencia de los clics, el valor debe estar entre {} y {}. 
+            """CPS significa 'Clics por segundo', ajusta este valor para controlar la frecuencia de los clics, el valor debe estar entre {} y {}. 
 
 Nota: Los CPS son aproximados, ya que dependen de muchas cosas: cpu, interprete de python, tiempo de renderizacion, errores de redondeo del sistema IEEE 754, etc.
 """.format(
@@ -104,7 +104,7 @@ Nota: Los CPS son aproximados, ya que dependen de muchas cosas: cpu, interprete 
         self.pause_key_help.grid(row=4, column=2, padx=3)
         ToolTip(
             self.pause_key_help,
-"""Tecla para pausar el autoclicker (ej: alt_gr, ctrl, shift). 
+            """Tecla para pausar el autoclicker (ej: alt_gr, ctrl, shift). 
 El valor debe ser compatible con `pynput.keyboard.Key`. 
 Para más información, consulta la documentación oficial: 
 https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key""",
@@ -141,9 +141,9 @@ https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key""",
             return 1
         cps = min(cps, self.max_cps)
 
-        res_time= 1 / cps
-        # sustract 0.003 to avoid rounding errors and function call times
-        return res_time - 0.003
+        res_time = 1 / cps
+        # sustract 2% to avoid rounding errors and function call times
+        return res_time * 0.98
 
     def start_clicking(self, cps):
         """Inicia el autoclicker."""

@@ -36,7 +36,8 @@ jobs:
         id: extract_changes
         shell: bash
         run: |
-          echo "changes=$(cat ./changes.txt)" >> $GITHUB_OUTPUT
+          changes=$(cat ./changes.txt | sed ':a;N;$!ba;s/\n/\\n/g')
+          echo "changes=$changes" >> $GITHUB_OUTPUT
 
       - name: Create Release
         id: create_release
