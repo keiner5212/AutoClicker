@@ -38,6 +38,15 @@ jobs:
           $encodedContent = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
           echo "changes=$encodedContent" >> $env:GITHUB_OUTPUT
 
+      
+      - name: Decode CHANGELOG
+        id: decode_changelog
+        shell: powershell
+        run: |
+          # Decodificar el Base64 a texto plano
+          $decodedContent = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${{ steps.read_changelog.outputs.base64_content }}"))
+          echo "decoded_content=$decodedContent" >> $env:GITHUB_OUTPUT
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -46,7 +55,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ fromJson('"' + steps.extract_changes.outputs.changes + '"') }}
+          body: ${{ steps.decode_changelog.outputs.decoded_content }}
           draft: true
           prerelease: false
 
