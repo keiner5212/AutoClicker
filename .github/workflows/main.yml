@@ -34,7 +34,6 @@ jobs:
         id: read_changelog
         shell: powershell
         run: |
-          # Leer y codificar en Base64
           $content = Get-Content -Path ./CHANGELOG.md -Raw
           $base64Content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
           echo "base64_content=$base64Content" >> $env:GITHUB_OUTPUT
@@ -45,14 +44,9 @@ jobs:
         env:
           BASE64_CONTENT: ${{ steps.read_changelog.outputs.base64_content }} 
         run: |
-          # Decodificar el Base64
           $decodedBytes = [Convert]::FromBase64String($env:BASE64_CONTENT)
           $decodedContent = [System.Text.Encoding]::UTF8.GetString($decodedBytes)
-          
-          # Guardar el resultado en outputs
           echo "decoded_content=$decodedContent" >> $env:GITHUB_OUTPUT
-
-          # Debug: Verificar longitud del contenido
           Write-Output "Longitud del contenido decodificado: $($decodedContent.Length)"
 
       - name: Create Release
