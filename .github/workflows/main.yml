@@ -36,7 +36,7 @@ jobs:
         id: extract_changes
         shell: bash
         run: |
-          changes=$(cat ./CHANGELOG.md)
+          changes=$(cat ./CHANGELOG.md | base64 -w 0)  # Codifica el contenido en Base64
           echo "changes=$changes" >> $GITHUB_OUTPUT
 
       - name: Create Release
@@ -47,7 +47,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ steps.extract_changes.outputs.changes }}
+          body: ${{ fromJson(steps.extract_changes.outputs.changes) | base64 --decode }}  
           draft: true
           prerelease: false
 
