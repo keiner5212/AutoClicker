@@ -30,22 +30,30 @@ jobs:
         run: |
           echo "version=$(python ./version.py)" >> $GITHUB_OUTPUT
 
-      - name: Extract Changes
-        id: extract_changes
+      - name: Read CHANGELOG
+        id: read_changelog
         shell: powershell
         run: |
-          $content = Get-Content ./CHANGELOG.md -Raw
-          $encodedContent = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
-          echo "changes=$encodedContent" >> $env:GITHUB_OUTPUT
+          # Leer y codificar en Base64
+          $content = Get-Content -Path ./CHANGELOG.md -Raw
+          $base64Content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))
+          echo "base64_content=$base64Content" >> $env:GITHUB_OUTPUT
 
-      
       - name: Decode CHANGELOG
         id: decode_changelog
         shell: powershell
+        env:
+          BASE64_CONTENT: ${{ steps.read_changelog.outputs.base64_content }} 
         run: |
-          # Decodificar el Base64 a texto plano
-          $decodedContent = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${{ steps.read_changelog.outputs.base64_content }}"))
+          # Decodificar el Base64
+          $decodedBytes = [Convert]::FromBase64String($env:BASE64_CONTENT)
+          $decodedContent = [System.Text.Encoding]::UTF8.GetString($decodedBytes)
+          
+          # Guardar el resultado en outputs
           echo "decoded_content=$decodedContent" >> $env:GITHUB_OUTPUT
+
+          # Debug: Verificar longitud del contenido
+          Write-Output "Longitud del contenido decodificado: $($decodedContent.Length)"
 
       - name: Create Release
         id: create_release
@@ -55,7 +63,7 @@ jobs:
         with:
           tag_name: ${{ steps.extract_version.outputs.version }}
           release_name: Release ${{ steps.extract_version.outputs.version }}
-          body: ${{ steps.decode_changelog.outputs.decoded_content }}
+          body: ${{ steps.decode_changelog.outputs.decoded_content }} 
           draft: true
           prerelease: false
 
