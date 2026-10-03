@@ -79,7 +79,9 @@ autoclicker/
 scripts/
   setup.sh                # create venv and install deps
   run.sh                  # activate venv and run the app
-requirements.txt          # pynput only
+  build.sh                # freeze the Linux executable with PyInstaller
+autoclicker.spec          # PyInstaller build config, shared by every OS
+requirements.txt          # pynput and Pillow
 ```
 
 ## Implementation notes
