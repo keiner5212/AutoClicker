@@ -13,9 +13,8 @@ one event target, so hover and press always cover the whole button.
 """
 
 import tkinter as tk
-from math import cos as _cos, sin as _sin
 
-from autoclicker.ui import theme
+from autoclicker.ui import render, theme
 
 
 def _blend(color_a, color_b, t):
@@ -26,39 +25,25 @@ def _resolve(chain, size, weight):
     return theme.resolve_font(chain, size, weight)
 
 
-def _rounded(canvas, x1, y1, x2, y2, r, **kwargs):
-    r = max(int(r), 1)
-    # Clamp the radius so it can never exceed half the shorter side. A
-    # radius past the midpoint makes the smoothing polygon self-intersect
-    # and Tk renders it as a rectangle with pinched corners.
-    r = min(r, int((x2 - x1) / 2), int((y2 - y1) / 2))
-    r = max(r, 1)
-    pts = [
-        x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r, x2, y2 - r,
-        x2, y2, x2 - r, y2, x1 + r, y2, x1, y2, x1, y2 - r,
-        x1, y1 + r, x1, y1,
-    ]
-    return canvas.create_polygon(pts, smooth=True, **kwargs)
+def _blit(canvas, image, offset=(0, 0)):
+    """Blit a rendered surface and return the PhotoImage.
 
+    A rendered surface already contains the margin its shadow needs, so it
+    fills the Canvas exactly and `offset` is (0, 0) for anything that stands
+    alone. Passing the margin in as the offset shifts the surface right and
+    down: the shadow gets clipped on the right and bottom and the highlight
+    is lost on the left and top.
 
-def _stadium(canvas, x1, y1, x2, y2, fill="", outline="", width=1):
-    """Draw a true pill (fully rounded ends).
+    `offset` is only non-zero for an overlay, where the image is positioned so
+    one specific feature lands on a chosen coordinate. Use
+    render.overlay_offset for that, never a bare margin.
 
-    A smoothing polygon with radius == half the height collapses into a
-    rectangle. Composing two caps and a body keeps the ends round at any
-    size, which is what the reference pills need.
+    Tk does not own the image buffer, so the caller must hold the returned
+    object or the widget goes blank on the next garbage collect.
     """
-    height = y2 - y1
-    r = height / 2.0
-    cy = (y1 + y2) / 2.0
-    return [
-        canvas.create_oval(x1, cy - r, x1 + 2 * r, cy + r,
-                           fill=fill, outline=outline, width=width),
-        canvas.create_oval(x2 - 2 * r, cy - r, x2, cy + r,
-                           fill=fill, outline=outline, width=width),
-        canvas.create_rectangle(x1 + r, y1, x2 - r, y2,
-                                fill=fill, outline=outline, width=width),
-    ]
+    photo = render.to_photo(canvas, image)
+    canvas.create_image(offset[0], offset[1], anchor="nw", image=photo)
+    return photo
 
 
 def draw_glyph(canvas, name, cx, cy, color, size, items=None):
@@ -138,42 +123,24 @@ def draw_glyph(canvas, name, cx, cy, color, size, items=None):
             items.append(item)
 
 
-def _draw_soft_shadow(canvas, width, height, radius, offset, pressed=False):
-    """Draw a fake-blurred dual shadow around an area of `width`x`height`."""
-    steps = theme.SHADOW_BLUR_STEPS if not pressed else theme.SHADOW_BLUR_STEPS_INNER
-    steps = max(steps, 3)
-    base_offset = offset if not pressed else theme.SHADOW_OFFSET_INNER
-    # Light shadow: top-left.
-    for i in range(steps):
-        t = i / max(steps - 1, 1)
-        color = _blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE, t)
-        pad = i
-        x1 = -base_offset - pad
-        y1 = -base_offset - pad
-        x2 = width + base_offset + pad
-        y2 = height + base_offset + pad
-        _rounded(canvas, x1, y1, x2, y2, radius + pad, fill=color, outline="")
-    # Dark shadow: bottom-right.
-    for i in range(steps):
-        t = i / max(steps - 1, 1)
-        color = _blend(theme.SHADOW_DARK_HEX, theme.SURFACE, t)
-        pad = i
-        x1 = base_offset - pad
-        y1 = base_offset - pad
-        x2 = width + base_offset + pad
-        y2 = height + base_offset + pad
-        _rounded(canvas, x1, y1, x2, y2, radius + pad, fill=color, outline="")
-    # Surface.
-    _rounded(canvas, 0, 0, width, height, radius, fill=theme.SURFACE, outline="")
+def _margin(depth=None, blur=None, compact=False):
+    """Canvas padding needed so a rendered shadow is never clipped."""
+    if compact:
+        depth = render.COMPACT_DEPTH if depth is None else depth
+        blur = render.COMPACT_BLUR if blur is None else blur
+    depth = theme.SHADOW_DEPTH if depth is None else depth
+    blur = theme.SHADOW_BLUR if blur is None else blur
+    return render.margin_for(depth, blur)
+
 
 
 class NeumoCard(tk.Frame):
     """A raised Neumorphic surface that hosts other widgets.
 
-    Structure: a Canvas sits behind the content purely to paint the dual
-    shadow and the surface fill. The content is a normal Frame, so Tk's
-    geometry manager reports a correct requested size and the card hugs
-    its content instead of falling back to a Canvas default height.
+    A Canvas sits behind the content purely to blit the antialiased surface.
+    The content is a normal Frame, so Tk's geometry manager reports a
+    correct requested size and the card hugs its content rather than
+    falling back to a Canvas default height.
     """
 
     def __init__(self, parent, padding=theme.CARD_PADDING, radius=theme.CARD_RADIUS,
@@ -182,18 +149,27 @@ class NeumoCard(tk.Frame):
         super().__init__(parent, **kwargs)
         self._padding = padding
         self._radius = radius
-        self._edge = theme.SHADOW_OFFSET + 2
+        # Room for the shadow that spills past the surface.
+        self._edge = _margin()
 
         self._shadow = tk.Canvas(
             self, bg=theme.SURFACE, highlightthickness=0, bd=0,
             width=1, height=1,
         )
         self._shadow.place(x=0, y=0, relwidth=1.0, relheight=1.0)
+        self._photo = None
+        self._painted = None
 
+        # Inset by the shadow margin. Packed edge to edge it would cover the
+        # whole card with flat base colour and hide the very shadow the
+        # Canvas underneath is there to draw, which is why the cards read as
+        # flat rectangles with a hairline edge.
         self._inner_frame = tk.Frame(
             self, bg=theme.SURFACE, padx=padding, pady=padding,
         )
-        self._inner_frame.pack(fill="both", expand=True)
+        self._inner_frame.pack(
+            fill="both", expand=True, padx=self._edge, pady=self._edge
+        )
 
         self.bind("<Configure>", self._on_resize)
 
@@ -206,9 +182,17 @@ class NeumoCard(tk.Frame):
         h = self.winfo_height()
         if w <= 1 or h <= 1:
             return
-        self._shadow.delete("shadow")
-        _draw_soft_shadow(
-            self._shadow, w, h, self._radius, theme.SHADOW_OFFSET
+        size = (w, h)
+        if size == self._painted:
+            return
+        self._painted = size
+        self._shadow.delete("all")
+        surface_w = w - self._edge * 2
+        surface_h = h - self._edge * 2
+        if surface_w <= 0 or surface_h <= 0:
+            return
+        self._photo = _blit(
+            self._shadow, render.raised(surface_w, surface_h, self._radius)
         )
 
 
@@ -349,7 +333,8 @@ class NeumoIcon(tk.Canvas):
 
     def __init__(self, parent, name="click", with_well=False, size=36,
                  accent=False, on_click=None):
-        canvas_size = size if with_well else theme.ICON_BOX
+        self._edge = _margin() if with_well else 0
+        canvas_size = (size if with_well else theme.ICON_BOX) + self._edge * 2
         super().__init__(
             parent,
             width=canvas_size,
@@ -367,6 +352,7 @@ class NeumoIcon(tk.Canvas):
         self._on_click = on_click
         self._glyph_items = []
         self._well_items = []
+        self._photo = None
         self.bind("<Configure>", lambda _e: self._render())
         if on_click is not None:
             self.bind("<Button-1>", self._handle_click)
@@ -407,40 +393,26 @@ class NeumoIcon(tk.Canvas):
 
     def _draw_well(self):
         size = self._size
-        offset = 3
-        steps = 4
-        for i in range(steps):
-            t = i / max(steps - 1, 1)
-            color = _blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE, t)
-            pad = i
-            _rounded(
-                self,
-                -offset - pad, -offset - pad,
-                size + offset + pad, size + offset + pad,
-                size // 2 + pad, fill=color, outline="",
-            )
-        for i in range(steps):
-            t = i / max(steps - 1, 1)
-            color = _blend(theme.SHADOW_DARK_HEX, theme.SURFACE, t)
-            pad = i
-            _rounded(
-                self,
-                offset - pad, offset - pad,
-                size + offset + pad, size + offset + pad,
-                size // 2 + pad, fill=color, outline="",
-            )
-        r = size // 2
+        # Pillow blit, so the well's rim is a smooth curve rather than a
+        # stepped one. The canvas reserves the shadow margin around it.
+        surface = size - self._edge * 2
+        if surface <= 0:
+            return
         self._well_items.append(
-            self.create_oval(2, 2, size - 2, size - 2,
-                              fill=theme.SURFACE, outline="")
+            self.create_image(
+                0, 0, anchor="nw",
+                image=render.to_photo(self, render.circle(surface, well=True)),
+            )
         )
 
     def _draw_glyph(self, color):
-        # The well already covers the full canvas, so the glyph always draws
-        # at its natural size centred inside it.
-        size = self._size - 10 if self._with_well else self._size
+        # Centred on the well, not on the canvas: the canvas carries an
+        # extra shadow margin on every side.
+        box = self._size - self._edge * 2
+        size = box - 10 if self._with_well else box
         draw_glyph(
-            self, self._name, self._size / 2.0, self._size / 2.0,
+            self, self._name,
+            self._edge + box / 2.0, self._edge + box / 2.0,
             color, size, self._glyph_items,
         )
 
@@ -458,8 +430,10 @@ class NeumoPillButton(tk.Canvas):
     VARIANTS = ("primary", "secondary", "danger", "ghost")
 
     def __init__(self, parent, text, variant="secondary", command=None,
-                 width=None, height=40, font=None, with_icon=None, icon_size=16):
-        self._edge = theme.SHADOW_OFFSET + 2
+                 width=None, height=40, font=None, with_icon=None, icon_size=16,
+                 compact=False):
+        self._compact = compact
+        self._edge = _margin(compact=compact)
         if font is None:
             font = theme.font_to_tk(theme.FONT_BUTTON)
         self._font = font if hasattr(font, "measure") else _resolve(
@@ -467,6 +441,7 @@ class NeumoPillButton(tk.Canvas):
         )
         self._icon_name = with_icon
         self._icon_size = icon_size
+        self._photo = None
         self._text = text
         self._variant = variant
         self._command = command
@@ -478,8 +453,8 @@ class NeumoPillButton(tk.Canvas):
         self._running = False
 
         text_w = self._font.measure(text)
-        pad_x = 16
-        gap = 8 if with_icon else 0
+        pad_x = 8 if compact else 16
+        gap = 6 if with_icon else 0
         icon_w = icon_size + gap if with_icon else 0
         needed = text_w + icon_w + pad_x * 2
         self._width = max(int(width) if width else 0, int(needed))
@@ -499,17 +474,18 @@ class NeumoPillButton(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._release)
         self.bind("<FocusIn>", lambda _e: self.set_focused(True))
         self.bind("<FocusOut>", lambda _e: self.set_focused(False))
+        self.bind("<Configure>", lambda _e: self._render())
         self._render()
 
     # ---- state ----
 
     def _fill_for(self):
+        # Every pill is surface-filled, matching the reference. A solid accent
+        # slab cannot read as neumorphic: against a fill darker than the
+        # shadow colour the dark shadow has nowhere to go, so the button came
+        # out as a flat block with a white glow around it.
         if self._disabled:
             return theme.SURFACE
-        if self._variant == "primary":
-            return theme.ACCENT
-        if self._variant == "danger":
-            return theme.DANGER
         if self._pressed:
             return theme.SURFACE_SUNKEN
         if self._hover:
@@ -519,8 +495,10 @@ class NeumoPillButton(tk.Canvas):
     def _fg_for(self):
         if self._disabled:
             return theme.INK_FAINT
-        if self._variant in ("primary", "danger"):
-            return "#FFFFFF"
+        if self._variant == "primary":
+            return theme.ACCENT
+        if self._variant == "danger":
+            return theme.DANGER
         if self._variant == "ghost":
             return theme.INK_MUTED
         return theme.INK_STRONG
@@ -528,8 +506,10 @@ class NeumoPillButton(tk.Canvas):
     def _icon_color(self):
         if self._disabled:
             return theme.INK_FAINT
-        if self._variant in ("primary", "danger"):
-            return "#FFFFFF"
+        if self._variant == "primary":
+            return theme.ACCENT
+        if self._variant == "danger":
+            return theme.DANGER
         if self._variant == "ghost":
             return theme.INK_MUTED
         return theme.INK
@@ -541,40 +521,34 @@ class NeumoPillButton(tk.Canvas):
         w, h = self._width, self._height
         x0, y0 = self._edge, self._edge
         x1, y1 = x0 + w, y0 + h
-        pressed = self._pressed or (self._variant == "primary" and self._running)
-
-        offset = theme.SHADOW_OFFSET_INNER if pressed else theme.SHADOW_OFFSET
-        if self._hover and not pressed and not self._disabled:
-            offset = theme.SHADOW_OFFSET + 1
-        steps = theme.SHADOW_BLUR_STEPS_INNER if pressed else theme.SHADOW_BLUR_STEPS
-
-        for i in range(steps):
-            t = i / max(steps - 1, 1)
-            _stadium(
-                self,
-                x0 - offset - i, y0 - offset - i,
-                x1 + offset + i, y1 + offset + i,
-                fill=_blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE, t),
-            )
-        for i in range(steps):
-            t = i / max(steps - 1, 1)
-            _stadium(
-                self,
-                x0 + offset - i, y0 + offset - i,
-                x1 + offset + i, y1 + offset + i,
-                fill=_blend(theme.SHADOW_DARK_HEX, theme.SURFACE, t),
-            )
-
-        if self._focused and not self._disabled:
-            _stadium(
-                self,
-                x0 - theme.FOCUS_RING_OFFSET, y0 - theme.FOCUS_RING_OFFSET,
-                x1 + theme.FOCUS_RING_OFFSET, y1 + theme.FOCUS_RING_OFFSET,
-                outline=theme.ACCENT, width=theme.FOCUS_RING_WIDTH,
-            )
-
+        pressed = self._pressed or self._running
         fill = self._fill_for()
-        _stadium(self, x0, y0, x1, y1, fill=fill)
+
+        # Shape comes from Pillow: Tk cannot antialias a canvas item, so a
+        # pill drawn with create_polygon has a staircase edge. The label
+        # stays a canvas text item, which Xft already renders smoothly.
+        ring = None
+        if self._focused and not self._disabled:
+            ring = (theme.ACCENT, theme.FOCUS_RING_WIDTH)
+        cw, ch = self.winfo_width(), self.winfo_height()
+        if cw > 1 and ch > 1:
+            surface_w = cw - self._edge * 2
+            surface_h = ch - self._edge * 2
+            if surface_w > 0 and surface_h > 0:
+                depth = render.COMPACT_DEPTH if self._compact else theme.SHADOW_DEPTH
+                blur = render.COMPACT_BLUR if self._compact else theme.SHADOW_BLUR
+                if pressed:
+                    shape = render.inset(
+                        surface_w, surface_h, surface_h // 2,
+                        base=fill, ring=ring, depth=depth, blur=blur,
+                    )
+                else:
+                    lift = 1 if (self._hover and not self._disabled) else 0
+                    shape = render.raised(
+                        surface_w, surface_h, surface_h // 2,
+                        base=fill, lift=lift, ring=ring, depth=depth, blur=blur,
+                    )
+                self._photo = _blit(self, shape)
 
         cy = (y0 + y1) / 2.0
         text_w = self._font.measure(self._text)
@@ -593,6 +567,7 @@ class NeumoPillButton(tk.Canvas):
             start_x, cy, text=self._text, font=self._font,
             fill=self._fg_for(), anchor="w",
         )
+
 
     # ---- public ----
 
@@ -657,12 +632,12 @@ class NeumoPillButton(tk.Canvas):
 
 
 class NeumoSoftEntry(tk.Frame):
-    """Inset pill input: a Canvas draws the well, a plain Entry holds the text.
+    """Inset pill input: a Canvas blits the well, a plain Entry holds the text.
 
-    ttk.Entry paints a themed border of its own that no amount of
-    `borderwidth=0` removes, which left a hard outline around every field.
-    tk.Entry honours `relief=flat` and `highlightthickness=0`, so the well we
-    draw is the only chrome the field has.
+    ttk.Entry paints a themed border of its own that `borderwidth=0` does
+    not remove, so every field had a hard outline around the well. tk.Entry
+    honours `relief=flat` and `highlightthickness=0`, so the blitted well is
+    the only chrome the field has.
     """
 
     HEIGHT = 38
@@ -674,7 +649,9 @@ class NeumoSoftEntry(tk.Frame):
         super().__init__(parent, bg=theme.SURFACE)
         self._invalid = bool(invalid)
         self._focused = False
-        self._edge = theme.SHADOW_OFFSET_INNER
+        self._edge = _margin(theme.SHADOW_DEPTH_INNER, theme.SHADOW_BLUR_INNER)
+        self._photo = None
+        self._painted = None
 
         # A bare Canvas reports a 378px requested width, which would starve
         # the sibling controls. Start at 1px and let fill="x" size it.
@@ -732,55 +709,45 @@ class NeumoSoftEntry(tk.Frame):
         self._entry.focus_set()
 
     def _render(self):
+        w = self._canvas.winfo_width()
+        if w <= 1:
+            return
+        surface_w = w - self._edge * 2
+        if surface_w <= 0:
+            return
+        state = (surface_w, self._invalid, self._focused)
+        if state == self._painted:
+            return
+        self._painted = state
+
         self._canvas.delete("all")
-        w = self._canvas.winfo_width() or 1
-        h = self.HEIGHT
-        e = self._edge
-        x0, y0 = e, e
-        x1, y1 = w - e, h + e
-        steps = theme.SHADOW_BLUR_STEPS_INNER
-
-        # Inset: dark shadow top-left, light shadow bottom-right.
-        for i in range(steps):
-            t = i / max(steps - 1, 1)
-            _stadium(
-                self._canvas,
-                x0 - e - i, y0 - e - i, x1 + e + i, y1 + e + i,
-                fill=_blend(theme.SHADOW_DARK_HEX, theme.SURFACE_SUNKEN, t),
-            )
-        for i in range(steps):
-            t = i / max(steps - 1, 1)
-            _stadium(
-                self._canvas,
-                x0 + e - i, y0 + e - i, x1 - e + i, y1 - e + i,
-                fill=_blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE_SUNKEN, t),
-            )
-
+        self._photo = _blit(
+            self._canvas,
+            render.inset(surface_w, self.HEIGHT, self.HEIGHT // 2),
+        )
         if self._focused or self._invalid:
             ring = theme.DANGER if self._invalid else theme.ACCENT
-            _stadium(
-                self._canvas,
-                x0 - theme.FOCUS_RING_OFFSET, y0 - theme.FOCUS_RING_OFFSET,
-                x1 + theme.FOCUS_RING_OFFSET, y1 + theme.FOCUS_RING_OFFSET,
+            self._canvas.create_rectangle(
+                self._edge - theme.FOCUS_RING_OFFSET - 1,
+                self._edge - theme.FOCUS_RING_OFFSET - 1,
+                self._edge + surface_w + theme.FOCUS_RING_OFFSET + 1,
+                self._edge + self.HEIGHT + theme.FOCUS_RING_OFFSET + 1,
                 outline=ring, width=theme.FOCUS_RING_WIDTH,
             )
-
-        _stadium(self._canvas, x0, y0, x1, y1, fill=theme.SURFACE_SUNKEN)
-
         self._entry.place(
-            x=x0 + 10, y=y0,
-            width=max(x1 - x0 - 20, 20), height=h,
+            x=self._edge + 10, y=self._edge,
+            width=max(surface_w - 20, 20), height=self.HEIGHT,
         )
 
 
 class NeumoStatusBadge(tk.Canvas):
-    """Inset status pill: a dot plus a label, both drawn on one Canvas.
+    """Inset status pill: a dot plus a label, both on one Canvas.
 
-    The previous version packed a Canvas and a Label side by side, so the
-    inset pill wrapped only the dot and the label sat on the bare surface as a
-    separate rectangle. One Canvas keeps the fill, the dot, and the text in the
-    same shape, and the width is measured from the text so long state names are
-    never clipped.
+    An earlier version packed a Canvas and a Label side by side, so the
+    inset pill wrapped only the dot and the text sat on the bare surface as
+    a separate rectangle. One Canvas keeps the fill, the dot, and the text in
+    the same shape, and the width is measured from the text so a long state
+    name is never clipped.
     """
 
     HEIGHT = 30
@@ -792,55 +759,37 @@ class NeumoStatusBadge(tk.Canvas):
         self._text = text.upper()
         self._dot_color = dot_color or theme.INK_MUTED
         self._font = _resolve(theme.FONT_LIGHT_CHAIN, 11, "light")
+        self._edge = _margin(theme.SHADOW_DEPTH_INNER, theme.SHADOW_BLUR_INNER)
+        self._photo = None
         super().__init__(
             parent,
-            width=self._measure(),
-            height=self.HEIGHT + theme.SHADOW_OFFSET_INNER * 2 + 4,
+            width=self._surface_width() + self._edge * 2,
+            height=self.HEIGHT + self._edge * 2,
             bg=theme.SURFACE,
             highlightthickness=0,
             bd=0,
         )
         self._render()
 
-    def _measure(self):
-        text_w = self._font.measure(self._text)
+    def _surface_width(self):
         return (
-            self.PAD_X * 2 + self.DOT_R * 2 + self.DOT_GAP + text_w
-            + theme.SHADOW_OFFSET_INNER * 2
+            self.PAD_X * 2 + self.DOT_R * 2 + self.DOT_GAP
+            + self._font.measure(self._text)
         )
 
     def set_state(self, text, dot_color):
         self._text = str(text).upper()
         self._dot_color = dot_color
-        self.configure(width=self._measure())
+        self.configure(width=self._surface_width() + self._edge * 2)
         self._render()
 
     def _render(self):
         self.delete("all")
-        w = max(self.winfo_width() or self._measure(), self._measure())
+        w = self._surface_width()
         h = self.HEIGHT
-        edge = theme.SHADOW_OFFSET_INNER
-        x0, y0 = edge, edge
-        x1, y1 = x0 + w - edge * 2, y0 + h
-
-        for i in range(theme.SHADOW_BLUR_STEPS_INNER):
-            t = i / max(theme.SHADOW_BLUR_STEPS_INNER - 1, 1)
-            _stadium(
-                self,
-                x0 - edge - i, y0 - edge - i, x1 + edge + i, y1 + edge + i,
-                fill=_blend(theme.SHADOW_DARK_HEX, theme.SURFACE_SUNKEN, t),
-            )
-        for i in range(theme.SHADOW_BLUR_STEPS_INNER):
-            t = i / max(theme.SHADOW_BLUR_STEPS_INNER - 1, 1)
-            _stadium(
-                self,
-                x0 + edge - i, y0 + edge - i, x1 - edge + i, y1 - edge + i,
-                fill=_blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE_SUNKEN, t),
-            )
-        _stadium(self, x0, y0, x1, y1, fill=theme.SURFACE_SUNKEN)
-
-        cy = (y0 + y1) / 2.0
-        dot_cx = x0 + self.PAD_X + self.DOT_R
+        self._photo = _blit(self, render.inset(w, h, h // 2))
+        cy = self._edge + h / 2.0
+        dot_cx = self._edge + self.PAD_X + self.DOT_R
         self.create_oval(
             dot_cx - self.DOT_R, cy - self.DOT_R,
             dot_cx + self.DOT_R, cy + self.DOT_R,
@@ -854,34 +803,35 @@ class NeumoStatusBadge(tk.Canvas):
 
 
 class NeumoToggle(tk.Canvas):
-    """Two-state switch: an inset track with a raised knob."""
+    """Two-state switch: an inset track with a raised knob.
 
-    TRACK_W = 50
-    TRACK_H = 26
-    KNOB_R = 9
+    The knob is an RGBA overlay. Rendering it opaque would bake the base
+    colour across the whole shadow margin, and pasting that over the track
+    painted a full-size rectangle on top of it.
+    """
+
+    TRACK_W = 52
+    TRACK_H = 28
+    KNOB_D = 20
     KNOB_PAD = 4
 
     def __init__(self, parent, on_change=None):
         self._state = False
-        self._hover = False
         self._on_change = on_change
-        self._edge = theme.SHADOW_OFFSET + 2
+        self._track_edge = _margin(theme.SHADOW_DEPTH_INNER, theme.SHADOW_BLUR_INNER)
+        self._knob_edge = render.overlay_margin()
         super().__init__(
             parent,
-            width=self.TRACK_W + self._edge * 2,
-            height=self.TRACK_H + self._edge * 2,
+            width=self.TRACK_W + self._track_edge * 2,
+            height=self.TRACK_H + self._track_edge * 2,
             bg=theme.SURFACE,
             highlightthickness=0,
             bd=0,
             cursor="hand2",
         )
         self.bind("<Button-1>", self._toggle)
-        self.bind("<Enter>", lambda _e: self._set_hover(True))
-        self.bind("<Leave>", lambda _e: self._set_hover(False))
-        self._render()
-
-    def _set_hover(self, hover):
-        self._hover = bool(hover)
+        self._track_photo = None
+        self._knob_photo = None
         self._render()
 
     def _toggle(self, _e=None):
@@ -901,45 +851,24 @@ class NeumoToggle(tk.Canvas):
 
     def _render(self):
         self.delete("all")
-        w, h = self.TRACK_W, self.TRACK_H
-        x0, y0 = self._edge, self._edge
-        x1, y1 = x0 + w, y0 + h
-        cy = (y0 + y1) / 2.0
-
-        for i in range(theme.SHADOW_BLUR_STEPS - 2):
-            t = i / max(theme.SHADOW_BLUR_STEPS - 3, 1)
-            _stadium(
-                self,
-                x0 - theme.SHADOW_OFFSET - i, y0 - theme.SHADOW_OFFSET - i,
-                x1 + theme.SHADOW_OFFSET + i, y1 + theme.SHADOW_OFFSET + i,
-                fill=_blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE, t),
-            )
-        for i in range(theme.SHADOW_BLUR_STEPS - 2):
-            t = i / max(theme.SHADOW_BLUR_STEPS - 3, 1)
-            _stadium(
-                self,
-                x0 + theme.SHADOW_OFFSET - i, y0 + theme.SHADOW_OFFSET - i,
-                x1 + theme.SHADOW_OFFSET + i, y1 + theme.SHADOW_OFFSET + i,
-                fill=_blend(theme.SHADOW_DARK_HEX, theme.SURFACE, t),
-            )
-        _stadium(self, x0, y0, x1, y1, fill=theme.SURFACE_SUNKEN)
-
-        knob_cx = x1 - self.KNOB_R - self.KNOB_PAD if self._state else (
-            x0 + self.KNOB_R + self.KNOB_PAD
+        e = self._track_edge
+        self._track_photo = _blit(
+            self, render.inset(self.TRACK_W, self.TRACK_H, self.TRACK_H // 2)
         )
-        knob_fill = theme.ACCENT if self._state else theme.SURFACE
-        # Knob shadow: two offset discs, then the knob on top.
-        for i in range(2):
-            t = i / 1.0
-            self.create_oval(
-                knob_cx - self.KNOB_R + 1 + i, cy - self.KNOB_R + 1 + i,
-                knob_cx + self.KNOB_R + 1 + i, cy + self.KNOB_R + 1 + i,
-                fill=_blend(theme.SHADOW_DARK_HEX, theme.SURFACE, t), outline="",
-            )
-        self.create_oval(
-            knob_cx - self.KNOB_R, cy - self.KNOB_R,
-            knob_cx + self.KNOB_R, cy + self.KNOB_R,
-            fill=knob_fill, outline="",
+        cy = e + self.TRACK_H / 2.0
+        half = self.KNOB_D / 2.0
+        if self._state:
+            knob_cx = e + self.TRACK_W - half - self.KNOB_PAD
+            knob_color = theme.ACCENT
+        else:
+            knob_cx = e + half + self.KNOB_PAD
+            knob_color = theme.SURFACE
+        self._knob_photo = _blit(
+            self, render.overlay(self.KNOB_D, knob_color),
+            offset=(
+                render.overlay_offset(knob_cx, self.KNOB_D, self._knob_edge),
+                render.overlay_offset(cy, self.KNOB_D, self._knob_edge),
+            ),
         )
 
 
@@ -1000,148 +929,113 @@ class NeumoPowerDot(tk.Canvas):
 class NeumoGauge(tk.Canvas):
     """Half-circle CPS dial with tick marks and an animating needle.
 
-    Geometry notes, both of which were wrong before:
-    - The sweep runs 180deg -> 270deg -> 360deg, i.e. left -> top -> right.
-      Sweeping -90 -> 0 -> +90 covers the right half instead, which left the
-      arc and the ticks describing two different dials.
-    - Tick labels sit just outside the outer ring. At the old radius they
-      fell off the canvas at the left and right extremes and rendered as
-      stray dashes.
-    - The value text is drawn last over a surface-coloured knockout, so the
-      needle reads as passing behind the number the way it does in the
-      reference image.
+    Rings, ticks, active arc, and needle are rasterised by Pillow; the tick
+    labels and the readout stay as canvas text, which Xft already antialiases.
+
+    Two things were wrong before and are worth keeping in mind:
+    - PIL measures arc angles clockwise from 3 o'clock, so the top half of
+      a ring is `start=180, end=360`. The opposite values draw the bottom
+      half and the dial reads as loose tick marks with no rings at all.
+    - Tick labels placed on a radius collide with the end tick marks and
+      with the needle at the extremes. They are pinned just outside the
+      outer ring at the three cardinal points instead, and the readout sits
+      in the middle over a surface knockout so the needle passes behind it,
+      the way it does in the reference.
     """
 
-    LABEL_RADIUS = 82
-    NEEDLE_REACH = 42
-    VALUE_SIZE = 26
+    # The readout is a three-line block: value, unit, then the pivot. The
+    # needle has to clear it at 90 degrees, so the block sits high and the
+    # needle stops short of the pivot centre.
+    VALUE_OFFSET = -40
+    SUB_OFFSET = -16
+    VALUE_SIZE = 27
     SUB_SIZE = 9
+    TICK_SIZE = 9
+    LABEL_GAP = 8
 
     def __init__(self, parent, value=0, max_value=1000, label="CPS",
                  width=None, height=None):
         width = width or theme.GAUGE_WIDTH
         height = height or theme.GAUGE_HEIGHT
-        self._w = width
-        self._h = height
+        self._gauge_w = width
+        self._gauge_h = height
         self._cx = width / 2.0
-        self._cy = height - 18
+        self._cy = height - render.DIAL_PIVOT_INSET
         self._value = 0
         self._target = 0
         self._max = max(1, max_value)
         self._label = label
         self._animation_after = None
+        self._photo = None
         self._value_font = _resolve(theme.FONT_MONO_CHAIN, self.VALUE_SIZE, "light")
         self._sub_font = _resolve(theme.FONT_LIGHT_CHAIN, self.SUB_SIZE, "light")
-        self._tick_font = _resolve(theme.FONT_LIGHT_CHAIN, 9, "light")
+        self._tick_font = _resolve(theme.FONT_LIGHT_CHAIN, self.TICK_SIZE, "light")
         super().__init__(
             parent, width=width, height=height,
             bg=theme.SURFACE, highlightthickness=0, bd=0,
         )
         self.set_value(value)
 
-    # ---- angles ----
-
     def _sweep(self, value):
-        """Map a value onto a Tk canvas angle.
-
-        Tk puts 0deg at 3 o'clock and counts counterclockwise, so on a
-        canvas (where y grows downward) 90deg is 12 o'clock and 180deg is
-        9 o'clock. A top half-dial therefore runs 180deg -> 90deg -> 0deg.
-        Sweeping the other way draws the bottom half, which is what the
-        first version did and why the arc sat under the pivot while the
-        ticks went over the top.
-        """
+        """Map a value onto a dial angle, 180 (left) to 0 (right)."""
         fraction = 0.0 if self._max == 0 else value / float(self._max)
         fraction = max(0.0, min(1.0, fraction))
         return 180 - fraction * 180
-
-    def _point(self, angle_deg, radius):
-        rad = angle_deg * 3.141592653589793 / 180.0
-        return (
-            self._cx + radius * _cos(rad),
-            self._cy - radius * _sin(rad),
-        )
-
-    # ---- public ----
 
     def set_value(self, value):
         self._target = max(0, min(float(value), self._max))
         if self._animation_after is None:
             self._animate()
 
-    # ---- paint ----
+    def _tick_label(self, index):
+        """Pinned just outside the ring at the left, top, and right."""
+        outer = render.DIAL_OUTER_R
+        gap = self.LABEL_GAP
+        # Tk anchors are compass pairs (e, w, center). PIL's r/l/m are not
+        # valid here and raise at create_text time.
+        if index == 0:
+            return self._cx - outer - gap, self._cy + 1, "e"
+        if index == theme.GAUGE_TICK_COUNT - 1:
+            return self._cx + outer + gap, self._cy + 1, "w"
+        return self._cx, self._cy - outer - gap, "center"
 
     def _paint(self):
-        import math
         self.delete("all")
-        cx, cy = self._cx, self._cy
-        outer = theme.GAUGE_OUTER_R
-        inner = theme.GAUGE_INNER_R
-
-        # Dial rings. start=0 extent=180 draws right -> top -> left.
-        for radius in (outer, inner):
-            self.create_arc(
-                cx - radius, cy - radius, cx + radius, cy + radius,
-                start=0, extent=180, style=tk.ARC,
-                outline=theme.INK_FAINT, width=1,
-            )
-
-        # Ticks and labels.
-        count = theme.GAUGE_TICK_COUNT
-        for i in range(count):
-            angle = 180 - (i / float(count - 1)) * 180
-            is_major = i in (0, (count - 1) // 2, count - 1)
-            x1, y1 = self._point(angle, outer)
-            x2, y2 = self._point(angle, outer - (12 if is_major else 6))
-            self.create_line(
-                x1, y1, x2, y2,
-                fill=theme.INK if is_major else theme.INK_FAINT,
-                width=1.6 if is_major else 1.0,
-            )
-            if is_major:
-                lx, ly = self._point(angle, self.LABEL_RADIUS)
-                self.create_text(
-                    lx, ly,
-                    text=str(int(round(i / float(count - 1) * self._max))),
-                    font=self._tick_font, fill=theme.INK_MUTED,
-                )
-
-        # Active arc up to the current value.
-        if self._value > 0:
-            self.create_arc(
-                cx - inner, cy - inner, cx + inner, cy + inner,
-                start=0, extent=max(self._sweep(self._value), 0.01),
-                style=tk.ARC, outline=theme.ACCENT, width=2,
-            )
-
-        # Needle: pivot -> tip, with a dot on each end.
-        angle = self._sweep(self._value)
-        nx, ny = self._point(angle, self.NEEDLE_REACH)
-        self.create_line(
-            cx, cy, nx, ny, fill=theme.ACCENT, width=2.4, capstyle=tk.ROUND
-        )
-        self.create_oval(
-            nx - 3, ny - 3, nx + 3, ny + 3, fill=theme.ACCENT, outline=""
-        )
-        self.create_oval(
-            cx - 5, cy - 5, cx + 5, cy + 5,
-            fill=theme.ACCENT, outline=theme.SURFACE, width=2,
+        self._photo = _blit(
+            self, render.dial(self._gauge_w, self._gauge_h, self._sweep, self._value)
         )
 
-        # Value last, over a surface knockout so the needle passes behind it.
+        for i in (0, (theme.GAUGE_TICK_COUNT - 1) // 2, theme.GAUGE_TICK_COUNT - 1):
+            x, y, anchor = self._tick_label(i)
+            self.create_text(
+                x, y,
+                text=str(int(round(i / float(theme.GAUGE_TICK_COUNT - 1) * self._max))),
+                font=self._tick_font, fill=theme.INK_MUTED, anchor=anchor,
+            )
+
+        # The readout sits over a surface knockout: the needle is drawn under
+        # it, and clipping the number out of the needle is what the reference
+        # does rather than shortening the needle out of the dial.
         text = f"{int(round(self._value))}"
-        value_y = cy - 28
-        half_w = self._value_font.measure(text) / 2.0 + 8
-        half_h = self.VALUE_SIZE * 0.75
+        value_y = self._cy + self.VALUE_OFFSET
+        sub_y = self._cy + self.SUB_OFFSET
+        half_w = max(
+            self._value_font.measure(text) / 2.0,
+            self._sub_font.measure(self._label.upper()) / 2.0,
+        ) + 9
         self.create_rectangle(
-            cx - half_w, value_y - half_h, cx + half_w, value_y + half_h,
+            self._cx - half_w, value_y - self.VALUE_SIZE * 0.7,
+            self._cx + half_w, sub_y + self.SUB_SIZE,
             fill=theme.SURFACE, outline="",
         )
         self.create_text(
-            cx, value_y, text=text, font=self._value_font, fill=theme.INK_STRONG
+            self._cx, value_y, text=text,
+            font=self._value_font, fill=theme.INK_STRONG, anchor="center",
         )
-
-    # ---- animation ----
+        self.create_text(
+            self._cx, sub_y, text=self._label.upper(),
+            font=self._sub_font, fill=theme.INK_MUTED, anchor="center",
+        )
 
     def _animate(self):
         delta = self._target - self._value
@@ -1170,6 +1064,8 @@ class NeumoTooltip:
         self._toplevel = None
         self._show_after = None
         self._hide_after = None
+        self._photo = None
+        self._edge = _margin()
         anchor.bind("<Enter>", self._schedule_show, add="+")
         anchor.bind("<Leave>", self._schedule_hide, add="+")
         if link:
@@ -1229,12 +1125,15 @@ class NeumoTooltip:
         border = theme.DANGER if self.variant == "error" else ""
 
         def update_size(_event=None):
+            pad = self._edge + 12
             canvas.configure(
-                width=body.winfo_reqwidth() + 32,
-                height=body.winfo_reqheight() + 32,
+                width=body.winfo_reqwidth() + pad * 2,
+                height=body.winfo_reqheight() + pad * 2,
             )
-            canvas.coords(body_window, 16, 16)
+            canvas.coords(body_window, pad, pad)
             self._draw_shadow(canvas, border=border)
+            # The blit is appended last, so lift the text back above it.
+            canvas.tag_raise(body_window)
 
         body.bind("<Configure>", update_size)
         toplevel.update_idletasks()
@@ -1258,24 +1157,21 @@ class NeumoTooltip:
         canvas.delete("shadow")
         w = canvas.winfo_width() or 320
         h = canvas.winfo_height() or 44
-        for i in range(theme.SHADOW_BLUR_STEPS - 3):
-            t = i / max(theme.SHADOW_BLUR_STEPS - 4, 1)
-            color = _blend(theme.SHADOW_LIGHT_HEX, theme.SURFACE, t)
-            canvas.create_rectangle(-4 - i, -4 - i, w + 4 + i, h + 4 + i,
-                                     fill=color, outline="", tag="shadow")
-        for i in range(theme.SHADOW_BLUR_STEPS - 3):
-            t = i / max(theme.SHADOW_BLUR_STEPS - 4, 1)
-            color = _blend(theme.SHADOW_DARK_HEX, theme.SURFACE, t)
-            canvas.create_rectangle(4 - i, 4 - i, w + 4 + i, h + 4 + i,
-                                     fill=color, outline="", tag="shadow")
-        r = max(theme.SMALL_RADIUS, 1)
-        pts = [
-            0 + r, 0, w - r, 0, w, 0, w, 0 + r, w, h - r,
-            w, h, w - r, h, 0 + r, h, 0, h, 0, h - r,
-            0, 0 + r, 0, 0,
-        ]
-        canvas.create_polygon(pts, smooth=True, fill=theme.SURFACE,
-                              outline=border, width=1 if border else 0, tag="shadow")
+        surface_w = w - self._edge * 2
+        surface_h = h - self._edge * 2
+        if surface_w <= 0 or surface_h <= 0:
+            return
+        # Keep a live reference: Tk does not own the image buffer, so
+        # dropping it blanks the canvas.
+        self._photo = _blit(
+            canvas, render.raised(surface_w, surface_h, theme.SMALL_RADIUS)
+        )
+        if border:
+            canvas.create_rectangle(
+                self._edge, self._edge,
+                self._edge + surface_w, self._edge + surface_h,
+                outline=border, width=1, tag="shadow",
+            )
 
     def _hide(self):
         self._hide_after = None

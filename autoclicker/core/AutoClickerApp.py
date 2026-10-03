@@ -14,9 +14,9 @@ from autoclicker.core.platform_compat import (
     apply_window_icon,
     session_warning,
 )
-from autoclicker.core.utils import resource_path
+from autoclicker.buildinfo import build_info
+from autoclicker.core.utils import resource_path, settings_path, user_config_dir
 from autoclicker.ui import theme
-from autoclicker.core.utils import settings_path, user_config_dir
 from autoclicker.ui.dashboard import Dashboard
 
 MAX_CPS = 1000
@@ -48,6 +48,7 @@ class AutoClickerApp:
         self.dashboard.set_topmost(True)
         self.dashboard.set_state("IDLE", theme.INK_MUTED)
         self.dashboard.set_running(False)
+        self.dashboard.set_build(self.build)
 
         self._load_settings()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -61,7 +62,11 @@ class AutoClickerApp:
         self.keyboard_listener.start()
 
     def _setup_window(self):
-        self.root.title("Auto Clicker")
+        # The build stamp in the title makes the running code verifiable.
+        # If this does not match `python -m autoclicker --build`, two
+        # different trees are in play.
+        self.build = build_info()
+        self.root.title(f"Auto Clicker - {self.build}")
         self.root.geometry(theme.WINDOW_SIZE)
         self.root.minsize(*theme.WINDOW_MIN_SIZE)
         self.root.resizable(False, False)

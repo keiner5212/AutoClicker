@@ -1,6 +1,6 @@
 [project]
 name = "autoclicker"
-version = "2.1"
+version = "2.5"
 description = "Cross-platform auto clicker with Neumorphism UI and macro engine."
 authors = [
     {name = "Keiner Alvarado",email = "kjgameplay0000@gmail.com"}

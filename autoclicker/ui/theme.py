@@ -12,7 +12,7 @@ SURFACE = "#E0E5EC"
 SURFACE_SUNKEN = "#D6DCE4"   # inset wells: entries, toggle track, status pill
 SURFACE_HOVER = "#E8EDF3"    # button hover
 
-SHADOW_DARK_HEX = "#A3B1C6"  # bottom-right shadow
+SHADOW_DARK_HEX = "#B0BCD0"  # bottom-right shadow
 SHADOW_LIGHT_HEX = "#FFFFFF" # top-left highlight
 
 INK_STRONG = "#3D4654"  # values, card titles
@@ -29,8 +29,8 @@ PAUSED = "#D69E2E"   # countdown, warning state
 
 # ---- geometry ----
 
-WINDOW_SIZE = "560x480"
-WINDOW_MIN_SIZE = (560, 480)
+WINDOW_SIZE = "560x540"
+WINDOW_MIN_SIZE = (560, 520)
 
 CARD_PADDING = 20
 CARD_PADDING_TIGHT = 16
@@ -40,10 +40,20 @@ SMALL_RADIUS = 12  # tooltip corners
 SPACE_3 = 12
 SPACE_4 = 16
 
-SHADOW_OFFSET = 5
-SHADOW_BLUR_STEPS = 10
-SHADOW_OFFSET_INNER = 3
-SHADOW_BLUR_STEPS_INNER = 6
+# Shadow offset and Gaussian sigma, in pixels. The renderer reserves
+# depth + 2*blur on each side so the full falloff is never clipped.
+#
+# depth has to be comparable to blur. At depth 3 with blur 5 the dark
+# shadow's falloff reached across the surface and cancelled most of the
+# light one, so the highlight measured +7 against the base while the shadow
+# measured -36: the lift was one-sided and the cards read as flat. Measured
+# per pair, with the highlight and shadow now within ~1.6x of each other:
+#   depth 3 blur 5  -> light +7  shadow -36   (asymmetric, rejected)
+#   depth 5 blur 3  -> light +26 shadow -42   (this one)
+SHADOW_DEPTH = 5
+SHADOW_BLUR = 3
+SHADOW_DEPTH_INNER = 3
+SHADOW_BLUR_INNER = 2
 
 FOCUS_RING_WIDTH = 2
 FOCUS_RING_OFFSET = 2
@@ -89,10 +99,8 @@ ICON_COLOR_ACCENT = ACCENT
 
 # ---- dial ----
 
-GAUGE_WIDTH = 200
-GAUGE_HEIGHT = 108
-GAUGE_OUTER_R = 76
-GAUGE_INNER_R = 56
+GAUGE_WIDTH = 220
+GAUGE_HEIGHT = 126
 GAUGE_TICK_COUNT = 11
 
 

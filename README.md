@@ -84,8 +84,19 @@ requirements.txt          # pynput only
 
 ## Implementation notes
 
-Every control paints itself on a single Tk Canvas. Two earlier approaches
-were tried and both fought the design:
+Tk has no antialiasing for Canvas items. The X11 core protocol draws a
+rounded edge as a hard step from surface to fill, and no option changes
+that. Text is the exception: Tk renders it through Xft and it is already
+smooth.
+
+So shapes are rasterised in `ui/render.py` with Pillow: draw at 4x, then
+downscale with LANCZOS. Shadows are a real Gaussian blur of the shape's own
+silhouette, offset in each direction. Text, tick labels, and the dial
+readout stay as Canvas items because Xft already handles those.
+
+Every render is cached, because a button repaints on each hover change.
+
+Two earlier approaches were tried and both fought the design:
 
 - `ttk.Entry` paints a themed border that `borderwidth=0` does not remove,
   so every field had a hard outline around the inset well. It is now
@@ -95,13 +106,13 @@ were tried and both fought the design:
   box. The button is now one Canvas: pill, icon, text, ring, and the whole
   hover/press target.
 
-Pills are drawn as two caps plus a body (`_stadium`) rather than a smoothed
-polygon, because a smoothing polygon with radius equal to half the height
-collapses back into a rectangle.
+Tk arc angles also bite: 0 degrees is at 3 o'clock counting
+counterclockwise, so a top half-dial is `start=0, extent=180`. The other
+direction draws the bottom half.
 
-The dial sweeps Tk angles 180 -> 90 -> 0. Tk puts 0 degrees at 3 o'clock and
-counts counterclockwise, so a top half-dial is `start=0, extent=180`; the
-other direction draws the bottom half.
+One tkinter footgun worth knowing: `Misc._w` is the widget's Tk path name.
+Assigning to `self._w` before `super().__init__()` looks fine and is
+silently overwritten with a string.
 
 ## Roadmap
 
