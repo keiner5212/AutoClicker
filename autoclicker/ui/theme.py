@@ -1,0 +1,201 @@
+"""Neumorphism design tokens shared by every UI module.
+
+Single source of truth for palette, geometry, and typography. Every other UI
+module reads from here, so a palette change happens in one place.
+"""
+
+# ---- palette ----
+# One surface color for the window and for every raised element. Depth comes
+# only from the shadow pair, never from a second fill.
+
+SURFACE = "#E0E5EC"
+SURFACE_SUNKEN = "#D6DCE4"   # inset wells: entries, toggle track, status pill
+SURFACE_HOVER = "#E8EDF3"    # button hover
+
+SHADOW_DARK_HEX = "#B0BCD0"  # bottom-right shadow
+SHADOW_LIGHT_HEX = "#FFFFFF" # top-left highlight
+
+INK_STRONG = "#3D4654"  # values, card titles
+INK = "#5A6473"        # body copy, tooltips
+INK_MUTED = "#8993A4"   # field labels, metadata
+INK_FAINT = "#B6BDC9"   # tick marks, disabled text
+
+ACCENT = "#7B8AA1"       # needle, focus ring, primary fill
+ACCENT_SOFT = "#A6B0C2"  # text selection
+
+DANGER = "#C0566B"   # invalid field, error state
+SUCCESS = "#5C9A7B"  # running state
+PAUSED = "#D69E2E"   # countdown, warning state
+
+# ---- geometry ----
+
+WINDOW_SIZE = "560x570"
+WINDOW_MIN_SIZE = (560, 550)
+
+CARD_PADDING = 20
+CARD_PADDING_TIGHT = 16
+CARD_RADIUS = 26
+SMALL_RADIUS = 12  # tooltip corners
+
+# A square corner at inset i inside a surface of radius R stays inside the
+# arc only while i >= R - R/sqrt(2) = 0.293 * R. The content Frame paints a
+# flat rectangle, so it has to start that far in or it squares off the card.
+CARD_CONTENT_INSET = 9
+
+SPACE_3 = 12
+SPACE_4 = 16
+
+# ---- control geometry ----
+# Fixed-size controls state their height and its pill radius here so the arc
+# is one value. A control that takes its height as an argument derives its
+# own radius from it instead.
+
+CONTROL_HEIGHT_BIG = 40    # action bar pills
+CONTROL_HEIGHT_MED = 38    # text entry
+CONTROL_RADIUS_MED = CONTROL_HEIGHT_MED // 2
+
+BUTTON_PAD_X = 16
+BUTTON_PAD_X_COMPACT = 8
+
+STATUS_BADGE_HEIGHT = 30
+STATUS_BADGE_RADIUS = STATUS_BADGE_HEIGHT // 2
+STATUS_BADGE_DOT_R = 4
+STATUS_BADGE_DOT_GAP = 10
+STATUS_BADGE_PAD_X = 13
+
+TOGGLE_TRACK_W = 52
+TOGGLE_TRACK_H = 28
+TOGGLE_TRACK_R = TOGGLE_TRACK_H // 2
+TOGGLE_KNOB_D = 20
+TOGGLE_KNOB_PAD = 4       # gap between knob and track edge
+
+# Shadow offset and Gaussian sigma, in pixels. The renderer reserves
+# depth + 3*blur on each side so the full falloff is never clipped.
+#
+# depth has to be comparable to blur. At depth 3 with blur 5 the dark
+# shadow's falloff reached across the surface and cancelled most of the
+# light one, so the highlight measured +7 against the base while the shadow
+# measured -36: the lift was one-sided and the cards read as flat. Measured
+# per pair, with the highlight and shadow now within ~1.6x of each other:
+#   depth 3 blur 5  -> light +7  shadow -36   (asymmetric, rejected)
+#   depth 5 blur 3  -> light +26 shadow -42   (this one)
+SHADOW_DEPTH = 5
+SHADOW_BLUR = 3
+SHADOW_DEPTH_INNER = 3
+SHADOW_BLUR_INNER = 2
+
+FOCUS_RING_WIDTH = 2
+FOCUS_RING_OFFSET = 2
+
+# ---- typography ----
+# Tk only accepts "normal" and "bold" as weights, so a "light" face is
+# approximated by asking for normal at one point smaller. resolve_font picks
+# the first family the running system actually has.
+
+FONT_LIGHT_CHAIN = (
+    "Helvetica Neue Light",
+    "Segoe UI Light",
+    "Inter Light",
+    "Arial",
+    "sans-serif",
+)
+FONT_REGULAR_CHAIN = (
+    "Helvetica Neue",
+    "Segoe UI",
+    "Inter",
+    "Arial",
+    "sans-serif",
+)
+FONT_MONO_CHAIN = (
+    "SF Mono Light",
+    "Consolas",
+    "Menlo",
+    "Courier New",
+    "monospace",
+)
+
+FONT_INPUT = (FONT_REGULAR_CHAIN, 13, "normal")
+FONT_BUTTON = (FONT_LIGHT_CHAIN, 12, "light")
+
+# ---- icons ----
+
+ICON_BOX = 28      # catalog glyphs are authored in this square
+ICON_STROKE = 1.6
+ICON_COLOR = INK
+ICON_COLOR_ACTIVE = INK_STRONG
+ICON_COLOR_DISABLED = INK_FAINT
+ICON_COLOR_ACCENT = ACCENT
+
+# ---- dial ----
+
+GAUGE_WIDTH = 196
+GAUGE_HEIGHT = 126
+GAUGE_TICK_COUNT = 11
+# The dial is now an instrument reading a measured rate, so full scale has to
+# sit near the requested rate. Headroom leaves room to show an overshoot
+# instead of pinning the needle to the right tick, and the floor keeps a
+# single click per second worth a visible arc.
+GAUGE_FULL_SCALE_HEADROOM = 1.25
+GAUGE_MIN_FULL_SCALE = 50
+# Hard ceiling on full scale, matching the CPS the settings field accepts.
+GAUGE_MAX_SCALE = 1000
+
+
+def hex_to_rgb(value):
+    """Convert '#RRGGBB' to (r, g, b) ints."""
+    value = value.lstrip("#")
+    return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def rgb_to_hex(rgb):
+    """Convert (r, g, b) ints back to '#RRGGBB'."""
+    return "#{:02X}{:02X}{:02X}".format(*rgb)
+
+
+def blend(color_a, color_b, t):
+    """Linear interpolate two hex colors. t in [0, 1]."""
+    ra, ga, ba = hex_to_rgb(color_a)
+    rb, gb, bb = hex_to_rgb(color_b)
+    return rgb_to_hex(
+        (
+            int(ra + (rb - ra) * t),
+            int(ga + (gb - ga) * t),
+            int(ba + (bb - ba) * t),
+        )
+    )
+
+
+def font_to_tk(font_tuple):
+    """Convert a token font tuple into a spec Tk will accept."""
+    if not isinstance(font_tuple, tuple) or len(font_tuple) != 3:
+        return font_tuple
+    chain, size, weight = font_tuple
+    family = chain if isinstance(chain, str) else (chain[0] if chain else "Arial")
+    return (
+        family,
+        size - 1 if weight == "light" else size,
+        "normal" if weight in ("light", "normal") else "bold",
+    )
+
+
+def resolve_font(chain, size, weight):
+    """Return a real tkfont.Font for the first family in `chain` that exists.
+
+    "light" is not a Tk weight, so it resolves to normal at one point
+    smaller, which reads lighter on every platform.
+    """
+    import tkinter.font as tkfont
+
+    tk_weight = "normal" if weight in ("light", "normal") else "bold"
+    effective_size = size - 1 if weight == "light" else size
+    for family in chain:
+        try:
+            font = tkfont.Font(family=family, size=effective_size, weight=tk_weight)
+            font.measure("A")
+            return font
+        except Exception:
+            continue
+    try:
+        return tkfont.Font(family="Arial", size=effective_size, weight=tk_weight)
+    except Exception:
+        return tkfont.Font(family="TkDefaultFont", size=effective_size, weight=tk_weight)
