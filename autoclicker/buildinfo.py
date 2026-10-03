@@ -13,6 +13,7 @@ title bar and a fresh `--build` run means the two are not the same code.
 import hashlib
 import os
 import sys
+from importlib.metadata import PackageNotFoundError, version as _dist_version
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SOURCES = (
@@ -23,7 +24,20 @@ _SOURCES = (
     os.path.join(_HERE, "core", "AutoClickerApp.py"),
 )
 
-VERSION = "2.5"
+
+def _detect_version():
+    """Release version from the installed distribution, which is pyproject's.
+
+    "dev" means the project is not installed, so there is no release version to
+    report. The spec copies the metadata into the frozen build.
+    """
+    try:
+        return _dist_version("autoclicker")
+    except PackageNotFoundError:
+        return "dev"
+
+
+VERSION = _detect_version()
 
 
 def build_stamp():
