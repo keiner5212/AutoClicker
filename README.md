@@ -1,18 +1,15 @@
 # Autockicker
 
-A cross-platform auto clicker with a Neumorphism UI and a programmable
-macro engine for ordered click and scroll sequences.
+A cross-platform auto clicker with a Neumorphism UI.
 
-- Basic clicker: CPS, pause hotkey, countdown.
-- Macro engine: ordered steps with action (left/right/middle click or
-  scroll), x/y, per-step delay, loop toggle, CPS override.
-- One-shot mouse capture: press Capture, then click anywhere on screen
-  to record the next step.
-- Save / load macros as JSON in the user config directory.
-- Neumorphism dashboard: multi-card layout, soft dual shadows, low
-  contrast, thin tracked typography, monochrome line-art icons, a
-  half-circle gauge with animated needle.
-- Cross-platform: Windows, macOS, Linux (X11 and XWayland).
+- CPS control with a live dial readout.
+- Countdown before clicking starts.
+- Global pause hotkey (any `pynput` key name).
+- Always-on-top with a toggle; re-asserted every 1.5 s so Linux window
+  managers that drop the hint keep the window visible.
+- Settings persist to a per-user JSON file.
+- Neumorphism throughout: one surface color, dual soft shadows, inset
+  wells, thin tracked type, monochrome line-art icons.
 
 ## Setup (venv only)
 
@@ -20,7 +17,7 @@ The project uses a local virtualenv. No global packages.
 
 ```bash
 bash scripts/setup.sh   # creates .venv and installs pynput
-bash scripts/run.sh     # activates venv and runs the app
+bash scripts/run.sh     # activates the venv and runs the app
 ```
 
 Or manually:
@@ -34,29 +31,82 @@ python -m autoclicker
 
 ## Linux notes
 
-On Wayland, pynput's mouse listener needs XWayland. Run with
-`GDK_BACKEND=x11 bash scripts/run.sh`, or switch your session to X11,
-for click and capture to register. The warning appears on launch.
+On Wayland, `pynput`'s mouse listener needs XWayland. Run with
+`GDK_BACKEND=x11 bash scripts/run.sh`, or switch the session to X11.
+The status badge shows `WAYLAND` on launch when it detects this.
+
+## Config file
+
+Settings are saved to `settings.json` in the per-user config directory:
+
+- Windows: `%APPDATA%\AutoClicker\`
+- Linux: `$XDG_CONFIG_HOME/AutoClicker/` (default `~/.config/AutoClicker/`)
+- macOS: `~/Library/Application Support/AutoClicker/`
+
+## Layout
+
+```
++-------------------------------------------+
+|  [dial card]        |  [settings card]   |
+|  Clicker            |  CPS      [ 20 ] ? |
+|  (gauge + CPS)      |  COUNTDOWN [  5 ] ? |
+|                     |  PAUSE KEY [ f6 ] ? |
+|  [status card]      |                    |
+|  Status             |                    |
+|  (IDLE, 00:00:00,   |                    |
+|   TOP toggle)       |                    |
++-------------------------------------------+
+|  [ Start ]  [ Stop ]              [ Quit ]|
++-------------------------------------------+
+```
 
 ## Project layout
 
 ```
 autoclicker/
   __init__.py            # entry point
+  __main__.py            # enables `python -m autoclicker`
   core/
-      AutoClickerApp.py   # orchestrator + dashboard glue
-      Clicker.py          # basic click loop
+      AutoClickerApp.py   # orchestrator: validation, run state, settings
+      Clicker.py          # the click loop and its CPS curve
       KeyboardListener.py # global pause hotkey
-      MacroEngine.py      # ordered step runner
-      MacroRecorder.py    # one-shot mouse capture
       platform_compat.py  # icon, always-on-top, session detection
       utils.py            # resource_path, config dir
   ui/
       theme.py            # palette, geometry, typography tokens
       widgets.py          # Neumorphic primitives + icon catalog
-      dashboard.py        # responsive 2-column dashboard layout
+      dashboard.py        # two-column layout
 scripts/
   setup.sh                # create venv and install deps
   run.sh                  # activate venv and run the app
 requirements.txt          # pynput only
 ```
+
+## Implementation notes
+
+Every control paints itself on a single Tk Canvas. Two earlier approaches
+were tried and both fought the design:
+
+- `ttk.Entry` paints a themed border that `borderwidth=0` does not remove,
+  so every field had a hard outline around the inset well. It is now
+  `tk.Entry` with `relief="flat"`.
+- Buttons that host a child `Frame` for their label get a rectangular
+  background painted over the rounded pill, and the focus ring draws as a
+  box. The button is now one Canvas: pill, icon, text, ring, and the whole
+  hover/press target.
+
+Pills are drawn as two caps plus a body (`_stadium`) rather than a smoothed
+polygon, because a smoothing polygon with radius equal to half the height
+collapses back into a rectangle.
+
+The dial sweeps Tk angles 180 -> 90 -> 0. Tk puts 0 degrees at 3 o'clock and
+counts counterclockwise, so a top half-dial is `start=0, extent=180`; the
+other direction draws the bottom half.
+
+## Roadmap
+
+Macro support (ordered click and scroll steps at a set frequency, with
+screen-point capture) was built and then removed. The macro engine and
+recorder were deleted rather than left dangling. It is a clean re-add when
+the compact UI is stable, because the current layout has room for one more
+card.

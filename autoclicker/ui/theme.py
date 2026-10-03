@@ -1,66 +1,57 @@
 """Neumorphism design tokens shared by every UI module.
 
-Single source of truth for palette, geometry, typography. Importing modules
-must read from here so palette changes happen in one place.
+Single source of truth for palette, geometry, and typography. Every other UI
+module reads from here, so a palette change happens in one place.
 """
 
+# ---- palette ----
+# One surface color for the window and for every raised element. Depth comes
+# only from the shadow pair, never from a second fill.
+
 SURFACE = "#E0E5EC"
-SURFACE_SUNKEN = "#D6DCE4"
-SURFACE_HOVER = "#E8EDF3"
+SURFACE_SUNKEN = "#D6DCE4"   # inset wells: entries, toggle track, status pill
+SURFACE_HOVER = "#E8EDF3"    # button hover
 
-SHADOW_DARK_RGB = (163, 177, 198)
-SHADOW_LIGHT_RGB = (255, 255, 255)
-SHADOW_DARK_PRESSED_RGB = (176, 188, 207)
-SHADOW_LIGHT_PRESSED_RGB = (245, 248, 253)
+SHADOW_DARK_HEX = "#A3B1C6"  # bottom-right shadow
+SHADOW_LIGHT_HEX = "#FFFFFF" # top-left highlight
 
-SHADOW_DARK_HEX = "#A3B1C6"
-SHADOW_LIGHT_HEX = "#FFFFFF"
+INK_STRONG = "#3D4654"  # values, card titles
+INK = "#5A6473"        # body copy, tooltips
+INK_MUTED = "#8993A4"   # field labels, metadata
+INK_FAINT = "#B6BDC9"   # tick marks, disabled text
 
-INK_STRONG = "#3D4654"
-INK = "#5A6473"
-INK_MUTED = "#8993A4"
-INK_FAINT = "#B6BDC9"
+ACCENT = "#7B8AA1"       # needle, focus ring, primary fill
+ACCENT_SOFT = "#A6B0C2"  # text selection
 
-ACCENT = "#7B8AA1"
-ACCENT_SOFT = "#A6B0C2"
+DANGER = "#C0566B"   # invalid field, error state
+SUCCESS = "#5C9A7B"  # running state
+PAUSED = "#D69E2E"   # countdown, warning state
 
-DANGER = "#C0566B"
-SUCCESS = "#5C9A7B"
-PAUSED = "#D69E2E"
-
-DIVIDER = "#C9D2DE"
+# ---- geometry ----
 
 WINDOW_SIZE = "560x480"
 WINDOW_MIN_SIZE = (560, 480)
-WINDOW_BG = SURFACE
 
 CARD_PADDING = 20
 CARD_PADDING_TIGHT = 16
 CARD_RADIUS = 26
-SCENE_RADIUS = 22
-LIST_RADIUS = 18
-PILL_RADIUS = 999
-SMALL_RADIUS = 12
+SMALL_RADIUS = 12  # tooltip corners
 
-SPACE_1 = 4
-SPACE_2 = 8
 SPACE_3 = 12
 SPACE_4 = 16
-SPACE_5 = 24
-SPACE_6 = 32
-SPACE_7 = 40
 
 SHADOW_OFFSET = 5
 SHADOW_BLUR_STEPS = 10
-SHADOW_ALPHA_PEAK_DARK = 0.55
-SHADOW_ALPHA_PEAK_LIGHT = 0.85
-
 SHADOW_OFFSET_INNER = 3
 SHADOW_BLUR_STEPS_INNER = 6
-SHADOW_ALPHA_PEAK_INNER = 0.35
 
 FOCUS_RING_WIDTH = 2
 FOCUS_RING_OFFSET = 2
+
+# ---- typography ----
+# Tk only accepts "normal" and "bold" as weights, so a "light" face is
+# approximated by asking for normal at one point smaller. resolve_font picks
+# the first family the running system actually has.
 
 FONT_LIGHT_CHAIN = (
     "Helvetica Neue Light",
@@ -84,61 +75,24 @@ FONT_MONO_CHAIN = (
     "monospace",
 )
 
-# Resolved font objects. These are created lazily on first access because
-# Tkinter requires a Tk root to resolve some font queries. We expose
-# helpers instead of pre-built tuples.
-def font(chain, size, weight):
-    """Return a tkfont.Font-like object. Resolved lazily."""
-    return (chain, size, weight)
+FONT_INPUT = (FONT_REGULAR_CHAIN, 13, "normal")
+FONT_BUTTON = (FONT_LIGHT_CHAIN, 12, "light")
 
+# ---- icons ----
 
-FONT_DISPLAY = font(FONT_LIGHT_CHAIN, 32, "light")
-FONT_CARD_TITLE = font(FONT_LIGHT_CHAIN, 12, "light")
-FONT_SECTION = font(FONT_LIGHT_CHAIN, 10, "light")
-FONT_FIELD_LABEL = font(FONT_LIGHT_CHAIN, 11, "light")
-FONT_INPUT = font(FONT_REGULAR_CHAIN, 13, "normal")
-FONT_BUTTON = font(FONT_LIGHT_CHAIN, 12, "light")
-FONT_HELP = font(FONT_LIGHT_CHAIN, 13, "light")
-FONT_BODY = font(FONT_REGULAR_CHAIN, 13, "normal")
-FONT_SUB = font(FONT_LIGHT_CHAIN, 10, "light")
-FONT_GAUGE_VALUE = font(FONT_MONO_CHAIN, 22, "light")
-FONT_GAUGE_SUB = font(FONT_LIGHT_CHAIN, 9, "light")
-FONT_GAUGE_TICK = font(FONT_LIGHT_CHAIN, 9, "light")
-FONT_STATUS = font(FONT_LIGHT_CHAIN, 11, "light")
-FONT_RUN_LARGE = font(FONT_LIGHT_CHAIN, 16, "light")
-FONT_TOOLTIP = font(FONT_REGULAR_CHAIN, 12, "normal")
-
-
-def font_to_tk(font_tuple):
-    """Convert a theme font tuple to a tk-compatible spec.
-
-    Tk only accepts string family names plus size and weight. We resolve
-    the chain here so callers can pass the resulting tuple to any widget.
-    """
-    if not isinstance(font_tuple, tuple) or len(font_tuple) != 3:
-        return font_tuple
-    chain, size, weight = font_tuple
-    if isinstance(chain, str):
-        return (chain, size, "normal" if weight in ("light", "normal") else "bold")
-    # chain is a list of family fallbacks; pick the first one and return
-    # a single tuple.
-    family = chain[0] if chain else "Arial"
-    return (family, size - 1 if weight == "light" else size,
-            "normal" if weight in ("light", "normal") else "bold")
-
-ICON_BOX = 28
-ICON_WELL = 36
+ICON_BOX = 28      # catalog glyphs are authored in this square
 ICON_STROKE = 1.6
 ICON_COLOR = INK
 ICON_COLOR_ACTIVE = INK_STRONG
 ICON_COLOR_DISABLED = INK_FAINT
 ICON_COLOR_ACCENT = ACCENT
 
+# ---- dial ----
+
 GAUGE_WIDTH = 200
 GAUGE_HEIGHT = 108
 GAUGE_OUTER_R = 76
 GAUGE_INNER_R = 56
-GAUGE_NEEDLE_LEN = 48
 GAUGE_TICK_COUNT = 11
 
 
@@ -166,38 +120,37 @@ def blend(color_a, color_b, t):
     )
 
 
-def blend_rgb(rgb_a, rgb_b, t):
-    return tuple(
-        int(a + (b - a) * t)
-        for a, b in zip(rgb_a, rgb_b)
+def font_to_tk(font_tuple):
+    """Convert a token font tuple into a spec Tk will accept."""
+    if not isinstance(font_tuple, tuple) or len(font_tuple) != 3:
+        return font_tuple
+    chain, size, weight = font_tuple
+    family = chain if isinstance(chain, str) else (chain[0] if chain else "Arial")
+    return (
+        family,
+        size - 1 if weight == "light" else size,
+        "normal" if weight in ("light", "normal") else "bold",
     )
 
 
 def resolve_font(chain, size, weight):
-    """Pick the first family in `chain` that Tk can resolve.
+    """Return a real tkfont.Font for the first family in `chain` that exists.
 
-    On systems without the named face, returns a fallback that approximates
-    a lighter weight by reducing the size by 1px.
+    "light" is not a Tk weight, so it resolves to normal at one point
+    smaller, which reads lighter on every platform.
     """
     import tkinter.font as tkfont
+
     tk_weight = "normal" if weight in ("light", "normal") else "bold"
     effective_size = size - 1 if weight == "light" else size
     for family in chain:
         try:
-            f = tkfont.Font(family=family, size=effective_size, weight=tk_weight)
-            f.measure("A")
-            return f
+            font = tkfont.Font(family=family, size=effective_size, weight=tk_weight)
+            font.measure("A")
+            return font
         except Exception:
             continue
     try:
         return tkfont.Font(family="Arial", size=effective_size, weight=tk_weight)
     except Exception:
         return tkfont.Font(family="TkDefaultFont", size=effective_size, weight=tk_weight)
-
-
-def lighten(color, amount):
-    return blend(color, SHADOW_LIGHT_HEX, amount)
-
-
-def darken(color, amount):
-    return blend(color, SHADOW_DARK_HEX, amount)

@@ -11,7 +11,6 @@ from autoclicker.ui.widgets import (
     NeumoCard,
     NeumoCardTitle,
     NeumoGauge,
-    NeumoIcon,
     NeumoPillButton,
     NeumoPowerDot,
     NeumoSoftEntry,
@@ -66,8 +65,8 @@ class StatusCard:
 
         NeumoCardTitle(
             inner, icon_name="clock", title="Status",
-            right_widget=NeumoPowerDot(
-                inner, on=False, command=self.app.toggle_always_on_top
+            right_factory=lambda row: NeumoPowerDot(
+                row, on=False, command=self.app.toggle_always_on_top
             ),
         ).pack(fill="x", pady=(0, 8))
 
@@ -145,17 +144,17 @@ class SettingsCard:
         tk.Label(
             row, text=label.upper(), font=label_font,
             bg=theme.SURFACE, fg=theme.INK_MUTED,
-        ).pack(side="left", padx=(0, 8))
+        ).pack(side="left", padx=(0, 10))
 
         entry = NeumoSoftEntry(row, width=10)
         entry.var.set(default)
         entry.pack(side="left", fill="x", expand=True)
 
         help_btn = NeumoPillButton(
-            row, text="?", variant="ghost", width=28, height=28,
+            row, text="?", variant="ghost", width=30, height=30,
         )
-        help_btn.pack(side="left", padx=(6, 0))
-        NeumoTooltip(help_btn._inner, help_text)
+        help_btn.pack(side="left", padx=(8, 0))
+        NeumoTooltip(help_btn, help_text)
         return entry
 
     def set_cps_invalid(self, invalid):
@@ -181,19 +180,19 @@ class ActionBar:
         inner.configure(bg=theme.SURFACE)
 
         self._start = NeumoPillButton(
-            inner, text="Start", variant="primary", width=96, height=36,
+            inner, text="Start", variant="primary", height=36,
             with_icon="play", command=self.app.start_auto_clicker,
         )
-        self._start.pack(side="left", padx=(0, 6))
+        self._start.pack(side="left", padx=(0, 8))
 
         self._stop = NeumoPillButton(
-            inner, text="Stop", variant="secondary", width=88, height=36,
+            inner, text="Stop", variant="secondary", height=36,
             with_icon="power", command=self.app.stop_clicking,
         )
-        self._stop.pack(side="left", padx=(0, 6))
+        self._stop.pack(side="left", padx=(0, 8))
 
         self._quit = NeumoPillButton(
-            inner, text="Quit", variant="ghost", width=72, height=36,
+            inner, text="Quit", variant="ghost", height=36,
             command=self.app.quit,
         )
         self._quit.pack(side="right")
@@ -216,7 +215,7 @@ class Dashboard:
         # out proportionally to each child's requested width, which let the
         # wide gauge card starve the settings column.
         self._columns = tk.Frame(self._shell, bg=theme.SURFACE)
-        self._columns.pack(side="top", fill="both", expand=True)
+        self._columns.pack(side="top", fill="x")
         self._columns.grid_columnconfigure(0, weight=1, uniform="col")
         self._columns.grid_columnconfigure(1, weight=1, uniform="col")
         self._left_col = tk.Frame(self._columns, bg=theme.SURFACE)
@@ -228,18 +227,20 @@ class Dashboard:
 
         # Each card hugs its own content height instead of stretching to
         # fill the column, so short cards do not render as tall empty slabs.
-        # Dial spans 0..1000 CPS. Ticks label the real CPS values so the
-        # needle reads against the range the user actually types.
+        # The dial spans 0..1000 CPS; tick labels show the real CPS values
+        # so the needle reads against the range the user actually types.
         self.dial = DialCard(self._left_col, app)
         self.dial.card.pack(side="top", fill="x", pady=(0, CARD_GAP))
         self.status = StatusCard(self._left_col, app)
         self.status.card.pack(side="top", fill="x")
 
         self.settings = SettingsCard(self._right_col, app)
-        self.settings.card.pack(side="top", fill="x", pady=(0, CARD_GAP))
+        self.settings.card.pack(side="top", fill="x")
 
-        self.actions = ActionBar(self._right_col, app)
-        self.actions.card.pack(side="top", fill="x")
+        # The action bar spans both columns so the three pills get room for
+        # their icons without the 256px column squeezing the last one flat.
+        self.actions = ActionBar(self._shell, app)
+        self.actions.card.pack(side="top", fill="x", pady=(CARD_GAP, 0))
 
     def get_settings(self):
         return {

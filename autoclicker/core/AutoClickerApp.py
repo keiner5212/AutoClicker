@@ -161,34 +161,38 @@ class AutoClickerApp:
     # ---- basic clicker flow ----
 
     def start_auto_clicker(self):
+        settings = self.dashboard.settings
+        # Validate every field before returning, so a bad pause key does not
+        # hide a bad countdown. Each field gets its own ring and the badge
+        # names the first problem.
+        problems = []
         try:
-            cps = int(self.dashboard.settings.cps_entry.var.get())
+            cps = int(settings.cps_entry.var.get())
+            if not (MIN_CPS <= cps <= MAX_CPS):
+                problems.append(("cps", "CPS 1-1000"))
         except ValueError:
-            self.dashboard.settings.set_cps_invalid(True)
-            self.dashboard.set_state("BAD CPS", theme.DANGER)
-            return
-        try:
-            countdown = int(self.dashboard.settings.countdown_entry.var.get())
-        except ValueError:
-            self.dashboard.settings.set_countdown_invalid(True)
-            self.dashboard.set_state("BAD COUNT", theme.DANGER)
-            return
-        try:
-            pause_key = keyboard.Key[self.dashboard.settings.pause_key_entry.var.get()]
-        except KeyError:
-            self.dashboard.settings.set_pause_key_invalid(True)
-            self.dashboard.set_state("BAD KEY", theme.DANGER)
-            return
+            cps = None
+            problems.append(("cps", "BAD CPS"))
 
-        cps_bad = not (MIN_CPS <= cps <= MAX_CPS)
-        self.dashboard.settings.set_cps_invalid(cps_bad)
-        self.dashboard.settings.set_countdown_invalid(countdown < 0)
-        self.dashboard.settings.set_pause_key_invalid(False)
-        if cps_bad:
-            self.dashboard.set_state("CPS 1-1000", theme.DANGER)
-            return
-        if countdown < 0:
-            self.dashboard.set_state("COUNT >= 0", theme.DANGER)
+        try:
+            countdown = int(settings.countdown_entry.var.get())
+            if countdown < 0:
+                problems.append(("countdown", "COUNT >= 0"))
+        except ValueError:
+            countdown = None
+            problems.append(("countdown", "BAD COUNT"))
+
+        try:
+            pause_key = keyboard.Key[settings.pause_key_entry.var.get()]
+        except KeyError:
+            pause_key = None
+            problems.append(("pause_key", "BAD KEY"))
+
+        settings.set_cps_invalid(any(p[0] == "cps" for p in problems))
+        settings.set_countdown_invalid(any(p[0] == "countdown" for p in problems))
+        settings.set_pause_key_invalid(any(p[0] == "pause_key" for p in problems))
+        if problems:
+            self.dashboard.set_state(problems[0][1], theme.DANGER)
             return
 
         self.keyboard_listener.set_pause_key(pause_key)

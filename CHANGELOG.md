@@ -1,53 +1,77 @@
-## 2.0 - Neumorphism dashboard and macros
+# Changelog
 
-### Visual redesign
-- Multi-card dashboard layout (header, two columns, footer) matching the
-  Neumorphism reference image: soft dual shadows, low contrast, generous
-  radius, thin tracked typography, monochrome line-art icons.
-- New app header with the project name in a double-stroke thin font
-  (lighter halo behind a darker fill).
-- New dashboard widgets:
-  - `NeumoIcon` with 20+ line-art icons drawn on a Canvas.
-  - `NeumoSceneCard` for the small square "Single Click" / "Loop Click"
-    shortcuts with a 56px icon well.
-  - `NeumoListItem` for the soft inner rows used in the macro step list.
-  - `NeumoAppHeader`, `NeumoCardTitle`, `NeumoPowerDot`, `NeumoChevron`.
-  - `NeumoGauge` half-circle dial with 11 tick marks, animated needle,
-    accent arc, and a center value readout.
-- Responsive grid: at >= 800 px the window shows two columns; below
-  that, columns stack. Right column is scrollable so the footer is
-  always reachable.
-- Subtle shadow stack: 10-step gradient, low offset (5 px), low alpha
-  peak (0.55 dark / 0.85 light) for the soft, almost-imperceptible lift
-  the reference uses.
+## 2.1 - Compact UI, controls rebuilt
 
-### Macros
-- Macro engine still runs ordered steps with click and scroll actions,
-  per-step delay, loop toggle, and CPS override.
-- Capture still records the next mouse click into a new step.
-- Save / Load JSON in the user config directory; path shown in the
-  dashboard event log.
+### Removed
+- Macro feature. `MacroEngine`, `MacroRecorder`, the step list, the Run/Stop
+  macro control, and the macro JSON file are all deleted. It was too much to
+  land at once alongside the new UI, and the engine was mostly untested
+  surface. The compact layout leaves room to re-add it as one more card.
 
-### Cross-platform fixes
-- App icon now loads on Windows (.ico), macOS, and Linux (PNG fallback
-  or runtime-generated PhotoImage).
-- Always-on-top re-asserted every 1.5s for the root window and any
-  tracked Toplevel. Toggle button in the Status card flips the flag.
-- Wayland session warning at startup explains the XWayland requirement.
+### UI
+- Window is 560x480: dial and status on the left, settings on the right, and
+  a full-width action bar underneath. Cards hug their content height instead
+  of stretching into empty slabs.
+- Every control now paints itself on a single Canvas. Buttons that hosted a
+  child Frame for their label had a rectangular background painted over the
+  rounded pill, and the focus ring drew as a hard box.
+- Pills are composed from two caps and a body instead of a smoothed polygon.
+  A smoothing polygon whose radius reaches half the height collapses back
+  into a rectangle, which is what the Start/Stop/Quit pills were doing.
+- Inputs use `tk.Entry` instead of `ttk.Entry`. ttk paints a themed border
+  that `borderwidth=0` does not remove, so every field had a hard outline.
+- The status badge draws its dot and its label on the same Canvas. It was a
+  Canvas plus a Label side by side, so the inset pill wrapped only the dot and
+  the text sat on the bare surface as a separate box.
+- Dial angle convention fixed. Tk measures 0 degrees at 3 o'clock counting
+  counterclockwise, so a top half-dial is `start=0, extent=180`; the previous
+  values drew the bottom half while the ticks swept the top.
+- Dial tick labels moved inside the canvas bounds, and the value now draws
+  last over a surface knockout so the needle passes behind the number.
+- Dial reads the real 0-1000 CPS range and labels the ticks 0 / 500 / 1000.
 
-### Setup
-- Local venv only. `bash scripts/setup.sh` creates `.venv` and installs
-  pynput. `bash scripts/run.sh` activates it and runs the app.
-- No global Python packages required.
+### Behaviour
+- All three fields validate on every Start, so a bad pause key no longer
+  hides a bad countdown. Each field gets its own ring; the badge names the
+  first problem.
+- Worker threads no longer touch widgets or call `after` directly. The
+  clicker and the hotkey listener push callables onto a queue that the main
+  loop drains, which removes the "main thread is not in main loop" crash on
+  exit.
+- The click loop resyncs when it falls behind instead of drifting, and sleeps
+  in slices so Stop stays responsive at high CPS.
+- Settings and the always-on-top preference persist to `settings.json` and
+  restore on launch. Quit persists before closing.
+- `__main__.py` added so `python -m autoclicker` works.
+
+### Icons
+- Fixed the `power` glyph. The arc was `start=250, extent=70`, which drew a
+  70 degree fragment near the top and rendered as a stray tick inside the Stop
+  button. A power symbol is a near-full ring with a gap at 12 o'clock, so it is
+  now `start=120, extent=300` plus a stem through the gap.
+- Fixed the `loop` glyph. The arc gap sat on the right while the arrowhead was
+  drawn at the top, so they did not meet. The gap and the arrowhead are now at
+  the same angle.
+- Re-centred the `click` and `chevron-right` glyphs, which were authored off
+  to one side of the 28x28 box.
+- Every catalog entry is now verified to stay inside its box and stay near the
+  box centre. Directional glyphs (chevron-up, chevron-down) are the one
+  deliberate exception.
+
+## 2.0 - Neumorphism redesign
+
+- Multi-card Neumorphism dashboard: soft dual shadows, low contrast, thin
+  tracked typography, monochrome line-art icons, half-circle gauge.
+- Cross-platform window icon (`.ico` on Windows, PNG or a runtime-generated
+  PhotoImage elsewhere).
+- Always-on-top re-asserted every 1.5 s for the root window and any tracked
+  Toplevel.
+- Wayland session warning on launch.
+- Local venv with `scripts/setup.sh` and `scripts/run.sh`. No global packages.
 
 ## 1.0 - Initial release
 
-### Improvements
-- Improvements to the user interface.
-- Added inputs to configure the countdown, pause key, and CPS.
-- Added help buttons.
-
-### Fixes
-- Attempted workaround for CPS precision issues using a relative curve.
-- CPU usage optimizations.
-- Followed SOLID principles.
+- Basic clicker with CPS, countdown, and pause key.
+- Help tooltips.
+- CPS precision curve to offset CPU and interpreter overhead.
+- SOLID structure.
