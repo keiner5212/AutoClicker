@@ -160,15 +160,20 @@ class NeumoCard(tk.Frame):
         self._photo = None
         self._painted = None
 
-        # Inset by the shadow margin. Packed edge to edge it would cover the
-        # whole card with flat base colour and hide the very shadow the
-        # Canvas underneath is there to draw, which is why the cards read as
-        # flat rectangles with a hairline edge.
+        # Inset by the shadow margin plus CARD_CONTENT_INSET, and taken back
+        # out of the content padding. The Frame paints a flat rectangle, so
+        # flush with the surface it squared off every corner and left the
+        # rounded shadow around a square card. Trading the padding for the
+        # inset keeps the content exactly where it was.
         self._inner_frame = tk.Frame(
-            self, bg=theme.SURFACE, padx=padding, pady=padding,
+            self, bg=theme.SURFACE,
+            padx=max(padding - theme.CARD_CONTENT_INSET, 0),
+            pady=max(padding - theme.CARD_CONTENT_INSET, 0),
         )
         self._inner_frame.pack(
-            fill="both", expand=True, padx=self._edge, pady=self._edge
+            fill="both", expand=True,
+            padx=self._edge + theme.CARD_CONTENT_INSET,
+            pady=self._edge + theme.CARD_CONTENT_INSET,
         )
 
         self.bind("<Configure>", self._on_resize)
@@ -430,8 +435,8 @@ class NeumoPillButton(tk.Canvas):
     VARIANTS = ("primary", "secondary", "danger", "ghost")
 
     def __init__(self, parent, text, variant="secondary", command=None,
-                 width=None, height=40, font=None, with_icon=None, icon_size=16,
-                 compact=False):
+                 width=None, height=theme.CONTROL_HEIGHT_BIG, font=None,
+                 with_icon=None, icon_size=16, compact=False):
         self._compact = compact
         self._edge = _margin(compact=compact)
         if font is None:
@@ -453,7 +458,7 @@ class NeumoPillButton(tk.Canvas):
         self._running = False
 
         text_w = self._font.measure(text)
-        pad_x = 8 if compact else 16
+        pad_x = theme.BUTTON_PAD_X_COMPACT if compact else theme.BUTTON_PAD_X
         gap = 6 if with_icon else 0
         icon_w = icon_size + gap if with_icon else 0
         needed = text_w + icon_w + pad_x * 2
@@ -527,6 +532,11 @@ class NeumoPillButton(tk.Canvas):
         # Shape comes from Pillow: Tk cannot antialias a canvas item, so a
         # pill drawn with create_polygon has a staircase edge. The label
         # stays a canvas text item, which Xft already renders smoothly.
+        # The radius is half the surface height, not a token: this button
+        # takes any height and the 22px help button is not 40px.
+        # The fill travels with the silhouette, not the canvas: an opaque
+        # hover colour used to cover the whole canvas and the pill sat in a
+        # square of it.
         ring = None
         if self._focused and not self._disabled:
             ring = (theme.ACCENT, theme.FOCUS_RING_WIDTH)
@@ -640,7 +650,7 @@ class NeumoSoftEntry(tk.Frame):
     the only chrome the field has.
     """
 
-    HEIGHT = 38
+    HEIGHT = theme.CONTROL_HEIGHT_MED
 
     def __init__(self, parent, textvariable=None, width=10, font=None,
                  invalid=False):
@@ -721,19 +731,19 @@ class NeumoSoftEntry(tk.Frame):
         self._painted = state
 
         self._canvas.delete("all")
+        # The ring is part of the rasterised well, not a canvas rectangle.
+        # create_rectangle drew a hard box around a pill and its corners
+        # never met the well's arc.
+        ring = None
+        if self._focused or self._invalid:
+            color = theme.DANGER if self._invalid else theme.ACCENT
+            ring = (color, theme.FOCUS_RING_WIDTH)
         self._photo = _blit(
             self._canvas,
-            render.inset(surface_w, self.HEIGHT, self.HEIGHT // 2),
+            render.inset(
+                surface_w, self.HEIGHT, theme.CONTROL_RADIUS_MED, ring=ring,
+            ),
         )
-        if self._focused or self._invalid:
-            ring = theme.DANGER if self._invalid else theme.ACCENT
-            self._canvas.create_rectangle(
-                self._edge - theme.FOCUS_RING_OFFSET - 1,
-                self._edge - theme.FOCUS_RING_OFFSET - 1,
-                self._edge + surface_w + theme.FOCUS_RING_OFFSET + 1,
-                self._edge + self.HEIGHT + theme.FOCUS_RING_OFFSET + 1,
-                outline=ring, width=theme.FOCUS_RING_WIDTH,
-            )
         self._entry.place(
             x=self._edge + 10, y=self._edge,
             width=max(surface_w - 20, 20), height=self.HEIGHT,
@@ -750,10 +760,10 @@ class NeumoStatusBadge(tk.Canvas):
     name is never clipped.
     """
 
-    HEIGHT = 30
-    DOT_R = 4
-    DOT_GAP = 10
-    PAD_X = 13
+    HEIGHT = theme.STATUS_BADGE_HEIGHT
+    DOT_R = theme.STATUS_BADGE_DOT_R
+    DOT_GAP = theme.STATUS_BADGE_DOT_GAP
+    PAD_X = theme.STATUS_BADGE_PAD_X
 
     def __init__(self, parent, text="IDLE", dot_color=None):
         self._text = text.upper()
@@ -787,7 +797,7 @@ class NeumoStatusBadge(tk.Canvas):
         self.delete("all")
         w = self._surface_width()
         h = self.HEIGHT
-        self._photo = _blit(self, render.inset(w, h, h // 2))
+        self._photo = _blit(self, render.inset(w, h, theme.STATUS_BADGE_RADIUS))
         cy = self._edge + h / 2.0
         dot_cx = self._edge + self.PAD_X + self.DOT_R
         self.create_oval(
@@ -808,30 +818,69 @@ class NeumoToggle(tk.Canvas):
     The knob is an RGBA overlay. Rendering it opaque would bake the base
     colour across the whole shadow margin, and pasting that over the track
     painted a full-size rectangle on top of it.
+
+    Its shadow uses the compact pair and the canvas is sized from whichever
+    of track and knob needs more room. With the full pair the knob image
+    came out taller than the track's canvas, so the falloff was cut at the
+    canvas edge and the switch read as a hard-edged rectangle.
     """
 
-    TRACK_W = 52
-    TRACK_H = 28
-    KNOB_D = 20
-    KNOB_PAD = 4
+    TRACK_W = theme.TOGGLE_TRACK_W
+    TRACK_H = theme.TOGGLE_TRACK_H
+    KNOB_D = theme.TOGGLE_KNOB_D
+    KNOB_PAD = theme.TOGGLE_KNOB_PAD
 
     def __init__(self, parent, on_change=None):
         self._state = False
+        self._focused = False
+        self._hover = False
         self._on_change = on_change
         self._track_edge = _margin(theme.SHADOW_DEPTH_INNER, theme.SHADOW_BLUR_INNER)
-        self._knob_edge = render.overlay_margin()
+        self._knob_edge = render.overlay_margin(
+            render.COMPACT_DEPTH, render.COMPACT_BLUR
+        )
+        width = max(
+            self.TRACK_W + self._track_edge * 2,
+            self.KNOB_D + self._knob_edge * 2,
+        )
+        height = max(
+            self.TRACK_H + self._track_edge * 2,
+            self.KNOB_D + self._knob_edge * 2,
+        )
         super().__init__(
             parent,
-            width=self.TRACK_W + self._track_edge * 2,
-            height=self.TRACK_H + self._track_edge * 2,
+            width=width,
+            height=height,
             bg=theme.SURFACE,
             highlightthickness=0,
             bd=0,
             cursor="hand2",
+            takefocus=1,
         )
         self.bind("<Button-1>", self._toggle)
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<FocusIn>", lambda _e: self.set_focused(True))
+        self.bind("<FocusOut>", lambda _e: self.set_focused(False))
         self._track_photo = None
         self._knob_photo = None
+        self._render()
+
+    def _on_enter(self, _e):
+        if self._hover:
+            return
+        self._hover = True
+        self._render()
+
+    def _on_leave(self, _e):
+        self._hover = False
+        self._render()
+
+    def set_focused(self, focused):
+        focused = bool(focused)
+        if focused == self._focused:
+            return
+        self._focused = focused
         self._render()
 
     def _toggle(self, _e=None):
@@ -851,20 +900,32 @@ class NeumoToggle(tk.Canvas):
 
     def _render(self):
         self.delete("all")
+        w, h = self.winfo_width(), self.winfo_height()
         e = self._track_edge
+        cx = w / 2.0
+        cy = h / 2.0
+        ring = (theme.ACCENT, theme.FOCUS_RING_WIDTH) if self._focused else None
+        base = theme.SURFACE_HOVER if self._hover else theme.SURFACE_SUNKEN
+        track_w, track_h = self.TRACK_W, self.TRACK_H
         self._track_photo = _blit(
-            self, render.inset(self.TRACK_W, self.TRACK_H, self.TRACK_H // 2)
+            self,
+            render.inset(track_w, track_h, theme.TOGGLE_TRACK_R, base=base,
+                         ring=ring),
+            offset=(int(cx - track_w / 2.0), int(cy - track_h / 2.0)),
         )
-        cy = e + self.TRACK_H / 2.0
         half = self.KNOB_D / 2.0
         if self._state:
-            knob_cx = e + self.TRACK_W - half - self.KNOB_PAD
+            knob_cx = cx + track_w / 2.0 - half - self.KNOB_PAD
             knob_color = theme.ACCENT
         else:
-            knob_cx = e + half + self.KNOB_PAD
+            knob_cx = cx - track_w / 2.0 + half + self.KNOB_PAD
             knob_color = theme.SURFACE
         self._knob_photo = _blit(
-            self, render.overlay(self.KNOB_D, knob_color),
+            self,
+            render.overlay(
+                self.KNOB_D, knob_color,
+                depth=render.COMPACT_DEPTH, blur=render.COMPACT_BLUR,
+            ),
             offset=(
                 render.overlay_offset(knob_cx, self.KNOB_D, self._knob_edge),
                 render.overlay_offset(cy, self.KNOB_D, self._knob_edge),
@@ -1161,17 +1222,18 @@ class NeumoTooltip:
         surface_h = h - self._edge * 2
         if surface_w <= 0 or surface_h <= 0:
             return
+        # The error border is part of the rasterised surface. A canvas
+        # rectangle drew it square, with corners that missed the popover's
+        # SMALL_RADIUS arc.
+        ring = (border, theme.FOCUS_RING_WIDTH) if border else None
         # Keep a live reference: Tk does not own the image buffer, so
         # dropping it blanks the canvas.
         self._photo = _blit(
-            canvas, render.raised(surface_w, surface_h, theme.SMALL_RADIUS)
+            canvas,
+            render.raised(
+                surface_w, surface_h, theme.SMALL_RADIUS, ring=ring,
+            ),
         )
-        if border:
-            canvas.create_rectangle(
-                self._edge, self._edge,
-                self._edge + surface_w, self._edge + surface_h,
-                outline=border, width=1, tag="shadow",
-            )
 
     def _hide(self):
         self._hide_after = None

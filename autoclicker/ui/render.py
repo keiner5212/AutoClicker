@@ -14,7 +14,9 @@ re-rasterising a 104x50 pill at 4x on every repaint would cost more than the
 repaint it is fixing.
 """
 
-from PIL import Image, ImageDraw, ImageFilter, ImageTk
+import math
+
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageTk
 
 from autoclicker.ui import theme
 
@@ -97,9 +99,14 @@ def _paint(surface_w, surface_h, radius, depth, blur, base, invert=False,
 
     `depth` is the shadow offset and `blur` its sigma. The margin is derived
     from both so the full falloff always fits inside the image.
+
+    The margin is transparent. A filled margin meant the base colour was
+    painted across the whole image, so a control whose fill was not the
+    window colour (a hovered button, an inset well) showed the canvas-sized
+    rectangle its shadow sat in instead of just its silhouette.
     """
     s = SUPERSAMPLE
-    margin = depth + int(blur * 2)
+    margin = depth + math.ceil(3 * blur)
     full_w = (surface_w + margin * 2) * s
     full_h = (surface_h + margin * 2) * s
     image = Image.new("RGB", (full_w, full_h), _hex(base))
@@ -112,6 +119,7 @@ def _paint(surface_w, surface_h, radius, depth, blur, base, invert=False,
 
     silhouette = Image.new("L", (full_w, full_h), 0)
     ImageDraw.Draw(silhouette).rounded_rectangle(box, radius=radius_px, fill=255)
+    coverage = silhouette.copy()
 
     # The two shadows are separate light contributions, so they are composed
     # additively into one layer. Pasting them straight onto the base let the
@@ -127,6 +135,7 @@ def _paint(surface_w, surface_h, radius, depth, blur, base, invert=False,
         mask = Image.new("L", (full_w, full_h), 0)
         mask.paste(silhouette, (shift, shift))
         mask = mask.filter(ImageFilter.GaussianBlur(blur * s))
+        coverage = ImageChops.lighter(coverage, mask)
         contribution = Image.new("RGBA", (full_w, full_h), _hex(color) + (0,))
         contribution.putalpha(mask)
         layer = Image.alpha_composite(layer, contribution)
@@ -141,13 +150,24 @@ def _paint(surface_w, surface_h, radius, depth, blur, base, invert=False,
     if ring:
         ring_color, ring_width = ring
         grow = int(theme.FOCUS_RING_OFFSET * s) + int(ring_width * s)
+        ring_box = [
+            box[0] - grow, box[1] - grow, box[2] + grow, box[3] + grow,
+        ]
         draw.rounded_rectangle(
-            [box[0] - grow, box[1] - grow, box[2] + grow, box[3] + grow],
+            ring_box,
             radius=radius_px + grow,
             outline=_hex(ring_color),
             width=max(int(ring_width * s), 1),
         )
+        # The ring sits out in the margin, where the shadow has already faded,
+        # so it has to claim its own opacity or it washes out.
+        ImageDraw.Draw(coverage).rounded_rectangle(
+            ring_box, radius=radius_px + grow,
+            outline=255, width=max(int(ring_width * s), 1),
+        )
 
+    image = image.convert("RGBA")
+    image.putalpha(coverage)
     return image.resize(
         (surface_w + margin * 2, surface_h + margin * 2),
         Image.Resampling.LANCZOS,
@@ -162,13 +182,23 @@ COMPACT_BLUR = 1.5
 
 
 def margin_for(depth, blur):
-    """Pixels the shadow needs on each side. Callers size their canvas by it."""
-    return depth + int(blur * 2)
+    """Pixels the shadow needs on each side. Callers size their canvas by it.
+
+    A Gaussian of sigma `blur` offset by `depth` needs `depth + ceil(3*blur)`
+    to hold its whole falloff. Reserving only `depth + 2*blur` cut the last
+    sigma off at the image edge, which showed as a hard straight line exactly
+    where the falloff stopped.
+    """
+    return depth + math.ceil(3 * blur)
 
 
 def raised(width, height, radius, base=None, lift=0, depth=None, blur=None,
            ring=None):
-    """Outset surface: light shadow up-left, dark shadow down-right."""
+    """Outset surface: light shadow up-left, dark shadow down-right.
+
+    The returned image is RGBA with a transparent margin, so a fill other
+    than the canvas colour changes only the silhouette, never the box.
+    """
     depth = (theme.SHADOW_DEPTH if depth is None else depth) + lift
     blur = theme.SHADOW_BLUR if blur is None else blur
     base = theme.SURFACE if base is None else base
@@ -181,7 +211,11 @@ def raised(width, height, radius, base=None, lift=0, depth=None, blur=None,
 
 
 def inset(width, height, radius, base=None, depth=None, blur=None, ring=None):
-    """Inset well: dark shadow up-left, light shadow down-right."""
+    """Inset well: dark shadow up-left, light shadow down-right.
+
+    Same transparent margin as `raised`: an inset well that filled its own
+    margin painted a sunken rectangle around itself on the card.
+    """
     depth = theme.SHADOW_DEPTH_INNER if depth is None else depth
     blur = theme.SHADOW_BLUR_INNER if blur is None else blur
     base = theme.SURFACE_SUNKEN if base is None else base
@@ -304,12 +338,10 @@ def overlay(size, color, radius=None, depth=None, blur=None, base=None,
             invert=False):
     """An RGBA piece that composites over whatever is already painted.
 
-    The opaque `raised` helper bakes the base colour into the whole image
-    including the shadow margin. That is right for a card, and wrong for
-    anything drawn on top of another surface: pasting an opaque knob onto a
-    toggle track painted a full-size rectangle over the track.
-
-    This returns transparency everywhere except the disc and its shadow.
+    An `overlay` is a shape that composites over another surface rather than
+    replacing one: the toggle knob sits on the track, and an opaque piece
+    would paste a full-size rectangle over it. Returns transparency
+    everywhere except the silhouette and its shadow.
     """
     depth = theme.SHADOW_DEPTH if depth is None else depth
     blur = theme.SHADOW_BLUR if blur is None else blur
@@ -323,7 +355,7 @@ def overlay(size, color, radius=None, depth=None, blur=None, base=None,
 
 def _overlay(size, color, radius, depth, blur, base, invert):
     s = SUPERSAMPLE
-    margin = depth + int(blur * 2)
+    margin = depth + math.ceil(3 * blur)
     full = (size + margin * 2) * s
     image = Image.new("RGBA", (full, full), (0, 0, 0, 0))
     m = margin * s

@@ -29,19 +29,48 @@ PAUSED = "#D69E2E"   # countdown, warning state
 
 # ---- geometry ----
 
-WINDOW_SIZE = "560x540"
-WINDOW_MIN_SIZE = (560, 520)
+WINDOW_SIZE = "560x570"
+WINDOW_MIN_SIZE = (560, 550)
 
 CARD_PADDING = 20
 CARD_PADDING_TIGHT = 16
 CARD_RADIUS = 26
 SMALL_RADIUS = 12  # tooltip corners
 
+# A square corner at inset i inside a surface of radius R stays inside the
+# arc only while i >= R - R/sqrt(2) = 0.293 * R. The content Frame paints a
+# flat rectangle, so it has to start that far in or it squares off the card.
+CARD_CONTENT_INSET = 9
+
 SPACE_3 = 12
 SPACE_4 = 16
 
+# ---- control geometry ----
+# Fixed-size controls state their height and its pill radius here so the arc
+# is one value. A control that takes its height as an argument derives its
+# own radius from it instead.
+
+CONTROL_HEIGHT_BIG = 40    # action bar pills
+CONTROL_HEIGHT_MED = 38    # text entry
+CONTROL_RADIUS_MED = CONTROL_HEIGHT_MED // 2
+
+BUTTON_PAD_X = 16
+BUTTON_PAD_X_COMPACT = 8
+
+STATUS_BADGE_HEIGHT = 30
+STATUS_BADGE_RADIUS = STATUS_BADGE_HEIGHT // 2
+STATUS_BADGE_DOT_R = 4
+STATUS_BADGE_DOT_GAP = 10
+STATUS_BADGE_PAD_X = 13
+
+TOGGLE_TRACK_W = 52
+TOGGLE_TRACK_H = 28
+TOGGLE_TRACK_R = TOGGLE_TRACK_H // 2
+TOGGLE_KNOB_D = 20
+TOGGLE_KNOB_PAD = 4       # gap between knob and track edge
+
 # Shadow offset and Gaussian sigma, in pixels. The renderer reserves
-# depth + 2*blur on each side so the full falloff is never clipped.
+# depth + 3*blur on each side so the full falloff is never clipped.
 #
 # depth has to be comparable to blur. At depth 3 with blur 5 the dark
 # shadow's falloff reached across the surface and cancelled most of the
@@ -99,7 +128,7 @@ ICON_COLOR_ACCENT = ACCENT
 
 # ---- dial ----
 
-GAUGE_WIDTH = 220
+GAUGE_WIDTH = 196
 GAUGE_HEIGHT = 126
 GAUGE_TICK_COUNT = 11
 
