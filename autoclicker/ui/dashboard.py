@@ -47,13 +47,17 @@ class DialCard:
             fill="x", pady=(0, 2)
         )
         self._gauge = NeumoGauge(
-            inner, value=0, max_value=1000, label="CPS",
+            inner, value=0, max_value=theme.GAUGE_MAX_SCALE, target=self.app.cps,
+            label="CPS",
             width=theme.GAUGE_WIDTH, height=theme.GAUGE_HEIGHT,
         )
         self._gauge.pack()
 
     def set_cps(self, value):
         self._gauge.set_value(value)
+
+    def set_cps_target(self, requested):
+        self._gauge.set_target(requested)
 
 
 class StatusCard:
@@ -293,6 +297,9 @@ class Dashboard:
 
     def set_cps(self, value):
         self.dial.set_cps(value)
+
+    def set_cps_target(self, requested):
+        self.dial.set_cps_target(requested)
 
     def set_state(self, text, dot_color):
         self.status.set_state(text, dot_color)

@@ -860,6 +860,7 @@ class NeumoToggle(tk.Canvas):
         self.bind("<Button-1>", self._toggle)
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
+        self.bind("<Configure>", lambda _e: self._render())
         self.bind("<FocusIn>", lambda _e: self.set_focused(True))
         self.bind("<FocusOut>", lambda _e: self.set_focused(False))
         self._track_photo = None
@@ -899,9 +900,13 @@ class NeumoToggle(tk.Canvas):
         self._on_change = callback
 
     def _render(self):
-        self.delete("all")
         w, h = self.winfo_width(), self.winfo_height()
-        e = self._track_edge
+        # Before the geometry manager has sized this Canvas, winfo_width is
+        # 1. Centring on 1x1 put the track at (-25, -13), so the switch
+        # showed a corner of itself until the pointer moved over it.
+        if w <= 1 or h <= 1:
+            return
+        self.delete("all")
         cx = w / 2.0
         cy = h / 2.0
         ring = (theme.ACCENT, theme.FOCUS_RING_WIDTH) if self._focused else None
@@ -911,7 +916,10 @@ class NeumoToggle(tk.Canvas):
             self,
             render.inset(track_w, track_h, theme.TOGGLE_TRACK_R, base=base,
                          ring=ring),
-            offset=(int(cx - track_w / 2.0), int(cy - track_h / 2.0)),
+            offset=(
+                render.overlay_offset(cx, track_w, self._track_edge),
+                render.overlay_offset(cy, track_h, self._track_edge),
+            ),
         )
         half = self.KNOB_D / 2.0
         if self._state:
@@ -924,6 +932,11 @@ class NeumoToggle(tk.Canvas):
             self,
             render.overlay(
                 self.KNOB_D, knob_color,
+                # Shadow pair from the surface the knob sits in, not from the
+                # knob's own fill. Derived from ACCENT it was a 36px dark
+                # smear over a 28px track, so the disc read as a blob
+                # dropped on the switch rather than a knob resting in it.
+                base=theme.SURFACE,
                 depth=render.COMPACT_DEPTH, blur=render.COMPACT_BLUR,
             ),
             offset=(
@@ -1014,8 +1027,8 @@ class NeumoGauge(tk.Canvas):
     TICK_SIZE = 9
     LABEL_GAP = 8
 
-    def __init__(self, parent, value=0, max_value=1000, label="CPS",
-                 width=None, height=None):
+    def __init__(self, parent, value=0, max_value=1000, target=None,
+                 label="CPS", width=None, height=None):
         width = width or theme.GAUGE_WIDTH
         height = height or theme.GAUGE_HEIGHT
         self._gauge_w = width
@@ -1024,8 +1037,9 @@ class NeumoGauge(tk.Canvas):
         self._cy = height - render.DIAL_PIVOT_INSET
         self._value = 0
         self._target = 0
-        self._max = max(1, max_value)
+        self._ceiling = max(1, max_value)
         self._label = label
+        self._requested = None
         self._animation_after = None
         self._photo = None
         self._value_font = _resolve(theme.FONT_MONO_CHAIN, self.VALUE_SIZE, "light")
@@ -1035,7 +1049,35 @@ class NeumoGauge(tk.Canvas):
             parent, width=width, height=height,
             bg=theme.SURFACE, highlightthickness=0, bd=0,
         )
+        self.set_target(target)
         self.set_value(value)
+
+    def set_target(self, requested):
+        """Rescale the dial around the rate the user asked for.
+
+        A fixed 1000 full scale put a 20 CPS needle at 2% of the arc, pinned
+        at the left tick, unable to separate a correct rate from a 5%
+        overshoot. Headroom leaves the overshoot somewhere to go.
+        """
+        self._requested = None if requested is None else float(requested)
+        if self._requested is None:
+            self._max = self._ceiling
+        else:
+            headroom = self._requested * theme.GAUGE_FULL_SCALE_HEADROOM
+            self._max = max(
+                1,
+                min(
+                    self._ceiling,
+                    max(theme.GAUGE_MIN_FULL_SCALE, int(round(headroom))),
+                ),
+            )
+        self._paint()
+
+    @property
+    def _target_label(self):
+        if self._requested is None:
+            return int(round(self._max))
+        return int(round(self._requested))
 
     def _sweep(self, value):
         """Map a value onto a dial angle, 180 (left) to 0 (right)."""
@@ -1063,26 +1105,39 @@ class NeumoGauge(tk.Canvas):
     def _paint(self):
         self.delete("all")
         self._photo = _blit(
-            self, render.dial(self._gauge_w, self._gauge_h, self._sweep, self._value)
+            self,
+            render.dial(
+                self._gauge_w, self._gauge_h, self._sweep, self._value,
+                sweep_key=self._max,
+            ),
         )
 
-        for i in (0, (theme.GAUGE_TICK_COUNT - 1) // 2, theme.GAUGE_TICK_COUNT - 1):
+        labels = {
+            0: "0",
+            (theme.GAUGE_TICK_COUNT - 1) // 2: str(self._target_label),
+            theme.GAUGE_TICK_COUNT - 1: str(int(round(self._max))),
+        }
+        for i, text in labels.items():
             x, y, anchor = self._tick_label(i)
             self.create_text(
-                x, y,
-                text=str(int(round(i / float(theme.GAUGE_TICK_COUNT - 1) * self._max))),
+                x, y, text=text,
                 font=self._tick_font, fill=theme.INK_MUTED, anchor=anchor,
             )
 
         # The readout sits over a surface knockout: the needle is drawn under
         # it, and clipping the number out of the needle is what the reference
         # does rather than shortening the needle out of the dial.
-        text = f"{int(round(self._value))}"
+        # One decimal, because a measured rate is a float and the whole point
+        # is to see it sit at or above the requested one. At rest it reads as
+        # a dash: "0" would read as a clicker delivering nothing.
+        idle = self._value < 0.05
+        text = "--" if idle else f"{self._value:.1f}"
+        sub_text = "" if idle else f"{self._target_label} {self._label.upper()}"
         value_y = self._cy + self.VALUE_OFFSET
         sub_y = self._cy + self.SUB_OFFSET
         half_w = max(
             self._value_font.measure(text) / 2.0,
-            self._sub_font.measure(self._label.upper()) / 2.0,
+            self._sub_font.measure(sub_text or self._label.upper()) / 2.0,
         ) + 9
         self.create_rectangle(
             self._cx - half_w, value_y - self.VALUE_SIZE * 0.7,
@@ -1093,10 +1148,11 @@ class NeumoGauge(tk.Canvas):
             self._cx, value_y, text=text,
             font=self._value_font, fill=theme.INK_STRONG, anchor="center",
         )
-        self.create_text(
-            self._cx, sub_y, text=self._label.upper(),
-            font=self._sub_font, fill=theme.INK_MUTED, anchor="center",
-        )
+        if sub_text:
+            self.create_text(
+                self._cx, sub_y, text=sub_text,
+                font=self._sub_font, fill=theme.INK_MUTED, anchor="center",
+            )
 
     def _animate(self):
         delta = self._target - self._value

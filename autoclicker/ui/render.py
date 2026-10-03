@@ -236,15 +236,19 @@ def circle(size, base=None, well=True, depth=None, blur=None):
 
 
 
-def dial(width, height, angle_for, value, scale=1.0):
+def dial(width, height, angle_for, value, scale=1.0, sweep_key=None):
     """Rings, ticks, active arc, and needle for the CPS dial, as one image.
 
     Repainted on every animation frame, so it is cached on the painted
     value. The ease-out settles in roughly 25 distinct steps, which turns
     into about 25 cached renders rather than one per frame.
+
+    `sweep_key` names the scale the angles were drawn against. The dial
+    rescales per run, so a cache keyed on the value alone served the
+    previous run's arc and needle to the next one.
     """
     return _cache.get(
-        ("dial", width, height, round(value, 1), scale),
+        ("dial", width, height, round(value, 1), scale, sweep_key),
         lambda: _dial(width, height, angle_for, value, scale),
     )
 

@@ -131,6 +131,14 @@ ICON_COLOR_ACCENT = ACCENT
 GAUGE_WIDTH = 196
 GAUGE_HEIGHT = 126
 GAUGE_TICK_COUNT = 11
+# The dial is now an instrument reading a measured rate, so full scale has to
+# sit near the requested rate. Headroom leaves room to show an overshoot
+# instead of pinning the needle to the right tick, and the floor keeps a
+# single click per second worth a visible arc.
+GAUGE_FULL_SCALE_HEADROOM = 1.25
+GAUGE_MIN_FULL_SCALE = 50
+# Hard ceiling on full scale, matching the CPS the settings field accepts.
+GAUGE_MAX_SCALE = 1000
 
 
 def hex_to_rgb(value):

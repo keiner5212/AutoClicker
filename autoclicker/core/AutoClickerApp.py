@@ -29,12 +29,21 @@ class AutoClickerApp:
         self.root = root
         self.mouse = Controller()
         self._always_on_top = True
-        self._pending_start = False
         self._toast_after_id = None
         self._closed = False
+        self.cps = 0
         # Worker threads (clicker, keyboard listener) never touch widgets
         # directly. They push callables here and the main loop runs them.
         self._ui_queue = queue.Queue()
+        # Run state, with one owner per fact.
+        # `_stop_requested` is a transient signal to the countdown thread that
+        # a stop landed, cleared when the next run is claimed. A plain bool
+        # could not do both jobs: written by the main loop, the countdown
+        # thread and the click thread, it read as "stop pending" and "run in
+        # flight" at the same time, and a Stop left it set for good.
+        self._stop_requested = threading.Event()
+        self._run_lock = threading.Lock()
+        self._run_active = False
 
         self.clicker = Clicker(self.mouse, self)
         self.keyboard_listener = KeyboardListener(self)
@@ -59,6 +68,7 @@ class AutoClickerApp:
 
         self._drain_ui_queue()
         self._tick_runtime()
+        self._tick_cps()
         self.keyboard_listener.start()
 
     def _setup_window(self):
@@ -160,7 +170,7 @@ class AutoClickerApp:
 
     def _clear_toast(self):
         self._toast_after_id = None
-        if not self.clicker.clicking and not self._pending_start:
+        if not self.clicker.clicking and not self.run_active:
             self.dashboard.set_state("IDLE", theme.INK_MUTED)
 
     # ---- basic clicker flow ----
@@ -201,30 +211,76 @@ class AutoClickerApp:
             return
 
         self.keyboard_listener.set_pause_key(pause_key)
-        self._pending_start = True
-        self.dashboard.set_cps(cps)
+        if not self.begin_run():
+            return
+        self.cps = cps
+        self.dashboard.set_cps_target(cps)
         self.dashboard.set_running(True)
         if self._toast_after_id is not None:
             self.root.after_cancel(self._toast_after_id)
             self._toast_after_id = None
         threading.Thread(
-            target=self.clicker.countdown,
+            target=self._run_countdown,
             args=(countdown, cps),
             daemon=True,
         ).start()
 
+    def _run_countdown(self, countdown, cps):
+        """Hold the run slot around the countdown thread.
+
+        Without this a raised exception killed the daemon thread silently and
+        left the slot claimed, so every later Start was refused and the app
+        looked broken until it was restarted.
+        """
+        try:
+            self.clicker.countdown(countdown, cps)
+        except Exception:
+            self.stop_clicking()
+
     def stop_clicking(self):
-        self._pending_start = False
+        self.end_run()
         self.clicker.stop()
         self.dashboard.set_cps(0)
         self.dashboard.set_running(False)
         self.dashboard.set_state("IDLE", theme.INK_MUTED)
 
     def toggle_pause(self):
-        if self.clicker.clicking or self._pending_start:
+        if self.clicker.clicking or self.run_active:
             self.stop_clicking()
         else:
             self.start_auto_clicker()
+
+    # ---- run ownership ----
+
+    @property
+    def run_active(self):
+        """True from an accepted Start until the run is stopped or ends."""
+        with self._run_lock:
+            return self._run_active
+
+    @property
+    def stop_requested(self):
+        return self._stop_requested.is_set()
+
+    def begin_run(self):
+        """Claim the run slot and arm the countdown. False if one is live.
+
+        Clearing the previous run's stop request belongs in here, under the
+        same lock as the claim. It used to happen after the check, so a Stop
+        left the flag set, every following Start was refused, and only
+        restarting the app cleared it.
+        """
+        with self._run_lock:
+            if self._run_active:
+                return False
+            self._stop_requested.clear()
+            self._run_active = True
+            return True
+
+    def end_run(self):
+        with self._run_lock:
+            self._stop_requested.set()
+            self._run_active = False
 
     # ---- always on top ----
 
@@ -252,7 +308,21 @@ class AutoClickerApp:
     def _tick_runtime(self):
         if self._closed:
             return
-        started = self.clicker._started_at
-        if self.clicker.clicking and started is not None:
-            self.dashboard.set_runtime(time.monotonic() - started)
+        if self.clicker.clicking and self.clicker.started_at is not None:
+            self.dashboard.set_runtime(
+                time.monotonic() - self.clicker.started_at
+            )
         self.root.after(1000, self._tick_runtime)
+
+    def _tick_cps(self):
+        """Feed the dial the measured rate, not the requested one.
+
+        Sampled here rather than posted per click: at 1000 CPS a per-click
+        post is 1000 queue entries a second for a needle that cannot move
+        that fast. 200 ms stays under the point where a falling rate reads
+        as a lag rather than a change.
+        """
+        if self._closed:
+            return
+        self.dashboard.set_cps(self.clicker.measured_cps)
+        self.root.after(200, self._tick_cps)
